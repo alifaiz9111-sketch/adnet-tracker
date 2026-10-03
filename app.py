@@ -74,9 +74,9 @@ def main():
             st.rerun()
         st.markdown("---")
 
-    # Fetch live stage counts for menu badges
+    # Fetch live stage counts for menu badges (PAYMENT matches mod_b and mod_c)
     cnt_b = get_stage_job_count("DESIGN")
-    cnt_c = get_stage_job_count("ADVANCE_PAYMENT")
+    cnt_c = get_stage_job_count("PAYMENT")
     cnt_d = get_stage_job_count("PRODUCTION")
     cnt_e = get_stage_job_count("QC")
     cnt_f = get_stage_job_count("DISPATCH")
@@ -125,11 +125,11 @@ def main():
         menu_options[f"🧾 7. Billing Review{badge_g}"] = mod_g_billing.render
 
     # 8. Accounts Billing & Audit Desk
-    # Visible to CEO, Super Admin, Accounts Staff, and the Auditor / Freelancer CA
     if account_type == "CEO":
         menu_options["🧾 Accounts Billing Queue"] = accounts_queue.render
     elif account_type in ["SUPER_ADMIN", "AUDITOR", "FREELANCER_CA"] or "MOD_BILL" in user_perms:
         menu_options["🧾 8. Accounts Billing & Audit"] = accounts_queue.render
+
     # Render Sidebar Navigation
     with st.sidebar:
         st.markdown("#### 📂 Your Workspaces")

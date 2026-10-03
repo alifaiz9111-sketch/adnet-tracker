@@ -230,7 +230,8 @@ def reset_invoice_attempts(job_id):
 def delete_job_sheet(job_id):
     child_tables = [
         "job_items", "job_artwork", "job_payments_advance", 
-        "job_production", "job_qc", "job_dispatch", 
+        "job_production", "job_production_materials", 
+        "job_qc", "job_quality_check", "job_dispatch", 
         "job_billing_review", "audit_logs"
     ]
     for table_name in child_tables:
