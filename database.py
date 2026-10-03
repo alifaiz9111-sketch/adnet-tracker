@@ -142,3 +142,11 @@ def delete_job_sheet(job_id):
         return True, "Job sheet and related records deleted successfully."
     except Exception as e:
         return False, str(e)
+
+def get_stage_job_count(stage):
+    """Return count of active jobs waiting in a specific stage."""
+    try:
+        res = supabase.table("jobs").select("job_id", count="exact").eq("current_stage", stage).execute()
+        return res.count if res.count is not None else len(res.data)
+    except Exception:
+        return 0
