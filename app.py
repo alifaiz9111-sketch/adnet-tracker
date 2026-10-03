@@ -13,15 +13,75 @@ from modules import (
     ceo_admin
 )
 
-# Page configuration
+# 1. Page Configuration
 st.set_page_config(
-    page_title="Adnet Advertising - Workflow ERP",
+    page_title="AdNet - Workflow ERP",
     page_icon="📦",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Session state initialization
+# 2. Dark Minimalist Brand Styling (Injected cleanly via CSS)
+st.markdown("""
+<style>
+    .stApp {
+        background-color: #0D1117;
+        color: #E6EDF3;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    
+    /* Card Containers */
+    [data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlockBorderWrapper"] {
+        border-radius: 8px !important;
+        border: 1px solid #30363D !important;
+        background-color: #161B22 !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+    }
+    
+    /* KPI Metrics */
+    div[data-testid="stMetric"] {
+        background-color: #161B22;
+        border: 1px solid #30363D;
+        border-left: 4px solid #E10600;
+        padding: 14px 18px;
+        border-radius: 6px;
+    }
+    
+    div[data-testid="stMetric"] label {
+        color: #8B949E !important;
+        font-size: 0.8rem !important;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
+        color: #F0F6FC !important;
+        font-weight: 700 !important;
+    }
+
+    /* Primary Buttons */
+    button[kind="primary"] {
+        background: linear-gradient(180deg, #E10600 0%, #B80500 100%) !important;
+        border: 1px solid #E10600 !important;
+        color: #FFFFFF !important;
+        font-weight: 600 !important;
+        border-radius: 6px !important;
+    }
+    
+    button[kind="primary"]:hover {
+        background: linear-gradient(180deg, #FF1A1A 0%, #D40500 100%) !important;
+        border-color: #FF1A1A !important;
+    }
+
+    /* Sidebar Background */
+    section[data-testid="stSidebar"] {
+        background-color: #090D13 !important;
+        border-right: 1px solid #21262D !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# 3. Session State Initialization
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "user" not in st.session_state:
@@ -32,7 +92,7 @@ def render_login():
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        st.title("🖨️ Adnet Print")
+        st.markdown("<h1 style='color: #E10600; font-weight: 900; letter-spacing: -1px; margin-bottom: 0px;'>AdNet</h1>", unsafe_allow_html=True)
         st.subheader("Internal Workflow & Floor Tracker")
         st.caption("Sign in with your employee credentials to access your workstations.")
 
@@ -64,17 +124,20 @@ def main():
     account_type = user.get("account_type", "STAFF")
     user_perms = user.get("permissions", [])
 
-    # Sidebar Header & User Profile
+    # Sidebar Header
     with st.sidebar:
-        st.markdown(f"### 👤 {user['full_name']}")
-        st.caption(f"Role: **{account_type}** | User: `@{user['username']}`")
+        st.markdown("<h2 style='color: #E10600; font-weight: 900; margin-bottom: 0px;'>AdNet</h2>", unsafe_allow_html=True)
+        st.caption("Workstation Floor Tracker")
+        st.markdown(f"**👤 {user['full_name']}**")
+        st.caption(f"Role: `{account_type}` | User: `@{user['username']}`")
+
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.authenticated = False
             st.session_state.user = None
             st.rerun()
         st.markdown("---")
 
-    # Fetch live stage counts for menu badges (PAYMENT matches mod_b and mod_c)
+    # Live Stage Counters for Menu Badges
     cnt_b = get_stage_job_count("DESIGN")
     cnt_c = get_stage_job_count("PAYMENT")
     cnt_d = get_stage_job_count("PRODUCTION")
@@ -82,64 +145,55 @@ def main():
     cnt_f = get_stage_job_count("DISPATCH")
     cnt_g = get_stage_job_count("BILLING_REVIEW")
 
-    # Configure dynamic workspaces based on user role & assigned permissions
+    # Dynamic Workspaces Menu
     menu_options = {}
 
-    # Executive & Administration tools
     if account_type in ["SUPER_ADMIN", "CEO"]:
         menu_options["👑 Executive Overview"] = ceo_admin.render_overview
         menu_options["👥 Staff & RBAC Admin"] = ceo_admin.render_user_management
 
-    # Floor Module A: Order Intake (Sales)
     if account_type == "SUPER_ADMIN" or "MOD_A" in user_perms:
         menu_options["📝 1. Order Intake (Sales)"] = mod_a_sales.render
 
-    # Floor Module B: Design & Proofs
     if account_type == "SUPER_ADMIN" or "MOD_B" in user_perms:
         badge_b = f" ({cnt_b})" if cnt_b > 0 else ""
         menu_options[f"🎨 2. Design & Proofs{badge_b}"] = mod_b_design.render
 
-    # Floor Module C: Advance / Accounts
     if account_type == "SUPER_ADMIN" or "MOD_C" in user_perms:
         badge_c = f" ({cnt_c})" if cnt_c > 0 else ""
         menu_options[f"💳 3. Advance / Accounts{badge_c}"] = mod_c_payment.render
 
-    # Floor Module D: Production Floor
     if account_type == "SUPER_ADMIN" or "MOD_D" in user_perms:
         badge_d = f" ({cnt_d})" if cnt_d > 0 else ""
         menu_options[f"⚙️ 4. Production Floor{badge_d}"] = mod_d_production.render
 
-    # Floor Module E: Quality Check (QC)
     if account_type == "SUPER_ADMIN" or "MOD_E" in user_perms:
         badge_e = f" ({cnt_e})" if cnt_e > 0 else ""
         menu_options[f"🔍 5. Quality Check (QC){badge_e}"] = mod_e_qc.render
 
-    # Floor Module F: Dispatch & Delivery
     if account_type == "SUPER_ADMIN" or "MOD_F" in user_perms:
         badge_f = f" ({cnt_f})" if cnt_f > 0 else ""
         menu_options[f"🚚 6. Dispatch & Delivery{badge_f}"] = mod_f_dispatch.render
 
-    # Floor Module G: Billing Review
     if account_type == "SUPER_ADMIN" or "MOD_G" in user_perms:
         badge_g = f" ({cnt_g})" if cnt_g > 0 else ""
         menu_options[f"🧾 7. Billing Review{badge_g}"] = mod_g_billing.render
 
-    # 8. Accounts Billing & Audit Desk
     if account_type == "CEO":
         menu_options["🧾 Accounts Billing Queue"] = accounts_queue.render
     elif account_type in ["SUPER_ADMIN", "AUDITOR", "FREELANCER_CA"] or "MOD_BILL" in user_perms:
         menu_options["🧾 8. Accounts Billing & Audit"] = accounts_queue.render
 
-    # Render Sidebar Navigation
+    # Sidebar Navigation Selection
     with st.sidebar:
-        st.markdown("#### 📂 Your Workspaces")
+        st.markdown("#### 📂 Workspaces")
         if not menu_options:
             st.warning("No modules currently assigned to your account. Please contact administration.")
             return
-        
+
         selected_menu = st.radio("Select Workspace", list(menu_options.keys()), label_visibility="collapsed")
 
-    # Render Selected Module View
+    # Render Active Workspace
     selected_view_fn = menu_options[selected_menu]
     selected_view_fn(user)
 
