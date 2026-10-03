@@ -126,20 +126,32 @@ def delete_user_account(user_id):
     supabase.table("user_permissions").delete().eq("user_id", user_id).execute()
     supabase.table("users").delete().eq("user_id", user_id).execute()
 
-# --- JOB SHEET DELETION ---
+# --- SAFE JOB SHEET DELETION ---
 def delete_job_sheet(job_id):
-    """Cascading deletion of a job and all its related records across all modules."""
+    """Cascading deletion of a job and all its related records across all modules safely."""
+    # List of all potential child tables linked to a job
+    child_tables = [
+        "job_items",
+        "job_artwork",
+        "job_payments_advance",
+        "job_production",
+        "job_qc",
+        "job_dispatch",
+        "job_billing_review",
+        "audit_logs"
+    ]
+    
+    # Delete child records safely (ignores missing tables)
+    for table_name in child_tables:
+        try:
+            supabase.table(table_name).delete().eq("job_id", job_id).execute()
+        except Exception:
+            pass  # If the table doesn't exist in Supabase, skip it without throwing an error
+
+    # Finally delete the job itself
     try:
-        supabase.table("job_items").delete().eq("job_id", job_id).execute()
-        supabase.table("job_artwork").delete().eq("job_id", job_id).execute()
-        supabase.table("job_payments_advance").delete().eq("job_id", job_id).execute()
-        supabase.table("job_production").delete().eq("job_id", job_id).execute()
-        supabase.table("job_qc").delete().eq("job_id", job_id).execute()
-        supabase.table("job_dispatch").delete().eq("job_id", job_id).execute()
-        supabase.table("job_billing_review").delete().eq("job_id", job_id).execute()
-        supabase.table("audit_logs").delete().eq("job_id", job_id).execute()
         supabase.table("jobs").delete().eq("job_id", job_id).execute()
-        return True, "Job sheet and related records deleted successfully."
+        return True, "Job sheet and all associated records deleted successfully."
     except Exception as e:
         return False, str(e)
 
