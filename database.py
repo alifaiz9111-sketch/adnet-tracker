@@ -20,7 +20,6 @@ def authenticate_user(username, password):
     if not res.data:
         return None
     user = res.data[0]
-    # Simple direct verification against password_hash stored in DB
     if user["password_hash"] == password:
         perm_res = supabase.table("user_permissions").select("module_id").eq("user_id", user["user_id"]).execute()
         user["permissions"] = [p["module_id"] for p in perm_res.data]
@@ -49,6 +48,24 @@ def create_user(username, password, full_name, account_type, email, modules):
 def update_user_status(user_id, is_active):
     supabase.table("users").update({"is_active": is_active}).eq("user_id", user_id).execute()
 
+# --- AUTO INCREMENT JOB NUMBER ---
+def get_next_job_no():
+    try:
+        res = supabase.table("jobs").select("job_no").order("job_id", desc=True).limit(50).execute()
+        if not res.data:
+            return "0001"
+        
+        max_num = 0
+        for row in res.data:
+            val = str(row.get("job_no", "")).strip()
+            # Extract digits if user entered pure digits
+            if val.isdigit():
+                max_num = max(max_num, int(val))
+        
+        return f"{max_num + 1:04d}"
+    except Exception:
+        return "0001"
+
 # --- DATA RETRIEVAL (WITH MASKING) ---
 def get_jobs_for_stage(stage, is_financial_role=False):
     jobs = supabase.table("jobs").select("*").eq("current_stage", stage).order("job_id", desc=False).execute().data
@@ -56,7 +73,7 @@ def get_jobs_for_stage(stage, is_financial_role=False):
         if is_financial_role:
             items = supabase.table("job_items").select("*").eq("job_id", j["job_id"]).execute().data
         else:
-            items = supabase.table("job_items").select("item_no, description_spec, material, qty, remarks").eq("job_id", j["job_id"]).execute().data
+            items = supabase.table("job_items").select("item_no, description_spec, material, qty, remarks, delivery_address").eq("job_id", j["job_id"]).execute().data
         j["items"] = items
     return jobs
 
