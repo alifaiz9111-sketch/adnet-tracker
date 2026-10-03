@@ -23,7 +23,7 @@ ALL_MODULES = {
     "MOD_E": "5. Quality Check (QC)",
     "MOD_F": "6. Dispatch & Delivery",
     "MOD_G": "7. Billing Review",
-    "MOD_BILL": "Accounts Billing Queue"
+    "MOD_BILL": "8. Accounts Billing & Audit (CA / Auditor)"
 }
 
 def render_overview(user):
@@ -253,9 +253,9 @@ def render_user_management(user):
 
             # Hierarchy check on role creation
             if current_role == "SUPER_ADMIN":
-                assigned_role = st.selectbox("Account Type", ["STAFF", "CEO"])
+                assigned_role = st.selectbox("Account Type", ["STAFF", "AUDITOR", "CEO"])
             else:
-                assigned_role = "STAFF"  # CEO can only create Staff
+                assigned_role = st.selectbox("Account Type", ["STAFF", "AUDITOR"])
 
             st.markdown("##### Select Initial Permissions:")
             p_cols = st.columns(2)

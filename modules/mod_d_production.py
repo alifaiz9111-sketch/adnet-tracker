@@ -58,3 +58,16 @@ def render(user):
                     update_job_stage(j["job_id"], "QC", "Employee E (Quality Check)")
                     st.success(f"Job #{j['job_no']} completed on floor. Dispatched to QC queue!")
                     st.rerun()
+
+from database import return_job_to_previous_stage
+
+with st.popover("↩️ Return to Previous Desk"):
+    return_reason = st.text_input("Reason for return", key=f"reason_{job_id}")
+    if st.button("Confirm Return", key=f"return_btn_{job_id}"):
+        if return_reason.strip():
+            # Example: from QC back to Production
+            return_job_to_previous_stage(job_id, "PRODUCTION", "EMPLOYEE_D", return_reason, user["full_name"])
+            st.toast("Job returned successfully", icon="↩️")
+            st.rerun()
+        else:
+            st.warning("Please enter a reason.")

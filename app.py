@@ -124,12 +124,12 @@ def main():
         badge_g = f" ({cnt_g})" if cnt_g > 0 else ""
         menu_options[f"🧾 7. Billing Review{badge_g}"] = mod_g_billing.render
 
-    # Accounts Billing Desk (Unnumbered for CEO, numbered 8 for Admin & Accounts Staff)
+    # 8. Accounts Billing & Audit Desk
+    # Visible to CEO, Super Admin, Accounts Staff, and the Auditor / Freelancer CA
     if account_type == "CEO":
         menu_options["🧾 Accounts Billing Queue"] = accounts_queue.render
-    elif account_type == "SUPER_ADMIN" or "MOD_BILL" in user_perms:
-        menu_options["🧾 8. Accounts Billing Queue"] = accounts_queue.render
-
+    elif account_type in ["SUPER_ADMIN", "AUDITOR", "FREELANCER_CA"] or "MOD_BILL" in user_perms:
+        menu_options["🧾 8. Accounts Billing & Audit"] = accounts_queue.render
     # Render Sidebar Navigation
     with st.sidebar:
         st.markdown("#### 📂 Your Workspaces")

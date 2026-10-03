@@ -1,48 +1,80 @@
 import streamlit as st
-from database import supabase, get_jobs_for_stage, update_job_stage
-from datetime import date
+import pandas as pd
+from database import (
+    get_jobs_for_stage,
+    update_job_stage,
+    return_job_to_previous_stage,
+    update_item_delivery_status
+)
 
 def render(user):
-    st.title("🚚 6. Dispatch & Delivery")
-    st.caption("Record delivery details, challan numbers, and recipient confirmation.")
-
-    jobs = get_jobs_for_stage("DISPATCH", is_financial_role=False)
+    st.title("🚚 6. Dispatch & Delivery Floor")
+    
+    jobs = get_jobs_for_stage("DISPATCH")
     if not jobs:
-        st.info("No jobs awaiting dispatch.")
+        st.success("✅ All clear! No jobs waiting for dispatch.")
         return
 
-    for j in jobs:
-        with st.container(border=True):
-            st.markdown(f"### Job #{j['job_no']} - {j['client_name']}")
-            st.write(f"**Delivery Address:** {j['delivery_address']}")
+    st.markdown(f"**{len(jobs)}** job(s) pending dispatch.")
 
-            with st.form(f"dispatch_form_{j['job_id']}"):
-                c1, c2, c3 = st.columns(3)
-                deliv_by = c1.text_input("Delivered By (Driver / Person)", value=user["full_name"], key=f"dby_{j['job_id']}")
-                challan_no = c2.text_input("Challan No. *", placeholder="e.g. CH-2026-089", key=f"chal_{j['job_id']}")
-                mode_awb = c3.text_input("Mode / AWB / Vehicle No.", placeholder="e.g. Porter / WB-02-XXXX", key=f"awb_{j['job_id']}")
+    for job in jobs:
+        job_id = job["job_id"]
+        job_no = job["job_no"]
+        client = job["client_name"]
+        items = job.get("items", [])
 
-                c4, c5 = st.columns(2)
-                deliv_date = c4.date_input("Delivery Date", value=date.today(), key=f"ddate_{j['job_id']}")
-                received_by = c5.text_input("Customer Receiving Person Name / Sign", key=f"recby_{j['job_id']}")
+        # Highlight returned jobs
+        if job.get("is_returned"):
+            st.error(f"⚠️ **Returned Job #{job_no}:** {job.get('return_reason')} (Returned by: {job.get('returned_by')})")
 
-                submit = st.form_submit_button("✅ Mark Delivered & Send to Billing Review", type="primary")
+        with st.expander(f"📦 Job #{job_no} — {client} (Due: {job.get('due_date')})", expanded=True):
+            st.write(f"**Delivery / Dispatch Address:** {job.get('address', 'Main Client Address')}")
+            
+            st.markdown("##### 📋 Line Items - Delivery Verification")
+            st.caption("Tick items as they are dispatched:")
 
-                if submit:
-                    if not challan_no:
-                        st.error("Challan Number is required.")
-                        return
+            all_items_delivered = True
+            for it in items:
+                it_id = it.get("item_id")
+                curr_status = bool(it.get("is_delivered", False))
+                
+                col_chk, col_desc, col_qty, col_rem = st.columns([1, 4, 2, 3])
+                with col_chk:
+                    is_ticked = st.checkbox("Delivered", value=curr_status, key=f"del_chk_{it_id}")
+                    if is_ticked != curr_status:
+                        update_item_delivery_status(it_id, is_ticked)
+                        st.rerun()
+                
+                if not is_ticked:
+                    all_items_delivered = False
 
-                    supabase.table("job_delivery").update({
-                        "delivered_by": deliv_by,
-                        "mode_awb_no": mode_awb,
-                        "delivery_date": str(deliv_date),
-                        "challan_no": challan_no,
-                        "received_by_name_sign": received_by,
-                        "is_delivered": True
-                    }).eq("job_id", j["job_id"]).execute()
+                with col_desc:
+                    st.write(f"**{it.get('description_spec')}** ({it.get('material')})")
+                with col_qty:
+                    st.write(f"Qty: **{it.get('qty')}**")
+                with col_rem:
+                    st.caption(f"Remarks: {it.get('remarks') or 'None'}")
 
-                    # Move to Billing Review (Employee G / Accounts)
-                    update_job_stage(j["job_id"], "BILLING_REVIEW", "Employee G (Billing Review)")
-                    st.success(f"Job #{j['job_no']} marked as dispatched and delivered!")
+            st.markdown("---")
+
+            col_actions, col_return = st.columns([3, 2])
+
+            with col_actions:
+                challan_no = st.text_input(f"Delivery Challan / Gate Pass No.", key=f"ch_{job_id}")
+                if st.button(f"✅ Mark Dispatched & Send to Billing Review", type="primary", key=f"fwd_{job_id}"):
+                    update_job_stage(job_id, "BILLING_REVIEW", "EMPLOYEE_G")
+                    st.toast(f"Job #{job_no} moved to Billing Review!", icon="🚀")
+                    st.success(f"Job #{job_no} dispatched!")
                     st.rerun()
+
+            with col_return:
+                st.markdown("##### ↩️ Return to Floor")
+                with st.popover("Return to Production"):
+                    ret_reason = st.text_input("Reason for return (required)", key=f"ret_rsn_{job_id}")
+                    if st.button("Confirm Return", key=f"btn_ret_{job_id}"):
+                        if not ret_reason.strip():
+                            st.warning("Please specify a reason.")
+                        else:
+                            return_job_to_previous_stage(job_id, "PRODUCTION", "EMPLOYEE_D", ret_reason, user["full_name"])
+                            st.toast(f"Job #{job_no} returned to Production Floor", icon="↩️")
+                            st.rerun()
