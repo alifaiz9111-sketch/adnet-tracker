@@ -139,7 +139,10 @@ def render_login():
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        st.markdown("<h1 style='color: #E10600; font-weight: 900; letter-spacing: -1px; margin-bottom: 0px;'>AdNet</h1>", unsafe_allow_html=True)
+        try:
+            st.image("assets/logo.png", width=220)
+        except Exception:
+            st.markdown("<h1 style='color: #E10600; font-weight: 900; letter-spacing: -1px; margin-bottom: 0px;'>AdNet</h1>", unsafe_allow_html=True)
         st.subheader("Internal Workflow & Floor Tracker")
         st.caption("Sign in with your employee credentials to access your workstations.")
 
@@ -174,7 +177,10 @@ def main():
 
     # Sidebar Header
     with st.sidebar:
-        st.markdown("<h2 style='color: #E10600; font-weight: 900; margin-bottom: 0px;'>AdNet</h2>", unsafe_allow_html=True)
+        try:
+            st.image("assets/logo.png", use_container_width=True)
+        except Exception:
+            st.markdown("<h2 style='color: #E10600; font-weight: 900; margin-bottom: 0px;'>AdNet</h2>", unsafe_allow_html=True)
         st.caption("Workstation Floor Tracker")
         st.markdown(f"**👤 {user['full_name']}**")
         st.caption(f"Role: `{account_type}` | User: `@{user['username']}`")
