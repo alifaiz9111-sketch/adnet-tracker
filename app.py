@@ -1,6 +1,12 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
-from database import authenticate_user, get_stage_job_count
+from database import (
+    authenticate_user, 
+    get_stage_job_count,
+    update_user_last_login,
+    get_user_login_summary
+)
 from modules import (
     mod_a_sales,
     mod_b_design,
@@ -21,7 +27,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 2. Dark Minimalist Brand Styling (Injected cleanly via CSS)
+# 2. Dark Minimalist Styling
 st.markdown("""
 <style>
     .stApp {
@@ -29,16 +35,12 @@ st.markdown("""
         color: #E6EDF3;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
-    
-    /* Card Containers */
     [data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlockBorderWrapper"] {
         border-radius: 8px !important;
         border: 1px solid #30363D !important;
         background-color: #161B22 !important;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
     }
-    
-    /* KPI Metrics */
     div[data-testid="stMetric"] {
         background-color: #161B22;
         border: 1px solid #30363D;
@@ -46,20 +48,16 @@ st.markdown("""
         padding: 14px 18px;
         border-radius: 6px;
     }
-    
     div[data-testid="stMetric"] label {
         color: #8B949E !important;
         font-size: 0.8rem !important;
         font-weight: 600;
         text-transform: uppercase;
     }
-
     div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
         color: #F0F6FC !important;
         font-weight: 700 !important;
     }
-
-    /* Primary Buttons */
     button[kind="primary"] {
         background: linear-gradient(180deg, #E10600 0%, #B80500 100%) !important;
         border: 1px solid #E10600 !important;
@@ -67,13 +65,10 @@ st.markdown("""
         font-weight: 600 !important;
         border-radius: 6px !important;
     }
-    
     button[kind="primary"]:hover {
         background: linear-gradient(180deg, #FF1A1A 0%, #D40500 100%) !important;
         border-color: #FF1A1A !important;
     }
-
-    /* Sidebar Background */
     section[data-testid="stSidebar"] {
         background-color: #090D13 !important;
         border-right: 1px solid #21262D !important;
@@ -86,16 +81,65 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "user" not in st.session_state:
     st.session_state.user = None
+if "login_popup_shown" not in st.session_state:
+    st.session_state.login_popup_shown = False
+
+
+# 4. Auto-Closing 30-Second Notification Modal
+@st.dialog("🔔 Workspace Briefing")
+def show_login_dialog(user):
+    account_type = user.get("account_type", "STAFF")
+    full_name = user.get("full_name", "User")
+    summary = get_user_login_summary(user)
+
+    if account_type == "CEO":
+        st.markdown(f"### Welcome back Executive Director, **{full_name}** 👋")
+        st.write("Here is your executive floor intake summary:")
+        cnt = summary["new_jobs_count"]
+        val = summary["new_jobs_total_val"]
+        st.markdown(f"#### **{cnt} new job sheet(s) created till your last visit of total ₹ {val:,.2f}**")
+        st.caption("Live floor progression, pipeline metrics, and bottleneck monitors are ready.")
+
+    elif account_type == "SUPER_ADMIN":
+        st.markdown(f"### Welcome back System Administrator, **{full_name}** 👋")
+        cnt = summary["new_jobs_count"]
+        val = summary["new_jobs_total_val"]
+        st.markdown(f"#### **{cnt} new job sheet(s) logged across all floors of total ₹ {val:,.2f}**")
+        st.caption("All administrative tools, cascading deletions, and RBAC permissions are active.")
+
+    else:
+        st.markdown(f"### Welcome back, **{full_name}** 👋")
+        stage_name = summary.get("pending_stage_name") or "Your Assigned Desk"
+        pending_cnt = summary.get("pending_stage_count", 0)
+        st.markdown(f"#### **You have {pending_cnt} pending job(s) awaiting action in {stage_name}.**")
+        st.caption("Please review and clear pending work tickets to prevent floor bottlenecks.")
+
+    st.markdown("---")
+    c_btn, c_timer = st.columns([1, 2])
+    with c_btn:
+        if st.button("Got it, Close", type="primary", use_container_width=True):
+            st.rerun()
+    with c_timer:
+        st.caption("⏱️ This briefing closes automatically in 30 seconds.")
+
+    # Native script to click the modal close button after 30 seconds
+    components.html("""
+    <script>
+        setTimeout(function() {
+            var closeButtons = window.parent.document.querySelectorAll('button[aria-label="Close"]');
+            if (closeButtons.length > 0) {
+                closeButtons[closeButtons.length - 1].click();
+            }
+        }, 30000);
+    </script>
+    """, height=0, width=0)
 
 
 def render_login():
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        try:
-            st.image("assets/logo.png", width=220)
-        except Exception:
-            st.markdown("<h1 style='color: #E10600; font-weight: 900; letter-spacing: -1px; margin-bottom: 0px;'>AdNet</h1>", unsafe_allow_html=True)
+        st.markdown("<h1 style='color: #E10600; font-weight: 900; letter-spacing: -1px; margin-bottom: 0px;'>AdNet</h1>", unsafe_allow_html=True)
         st.subheader("Internal Workflow & Floor Tracker")
         st.caption("Sign in with your employee credentials to access your workstations.")
 
@@ -112,6 +156,7 @@ def render_login():
                     if user:
                         st.session_state.authenticated = True
                         st.session_state.user = user
+                        st.session_state.login_popup_shown = False
                         st.toast(f"Welcome back, {user['full_name']}!", icon="👋")
                         st.rerun()
                     else:
@@ -129,10 +174,7 @@ def main():
 
     # Sidebar Header
     with st.sidebar:
-        try:
-            st.image("assets/logo.png", use_container_width=True)
-        except Exception:
-            st.markdown("<h2 style='color: #E10600; font-weight: 900; margin-bottom: 0px;'>AdNet</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='color: #E10600; font-weight: 900; margin-bottom: 0px;'>AdNet</h2>", unsafe_allow_html=True)
         st.caption("Workstation Floor Tracker")
         st.markdown(f"**👤 {user['full_name']}**")
         st.caption(f"Role: `{account_type}` | User: `@{user['username']}`")
@@ -140,8 +182,15 @@ def main():
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.authenticated = False
             st.session_state.user = None
+            st.session_state.login_popup_shown = False
             st.rerun()
         st.markdown("---")
+
+    # Trigger auto-closing dialog on first login render
+    if not st.session_state.login_popup_shown:
+        st.session_state.login_popup_shown = True
+        show_login_dialog(user)
+        update_user_last_login(user["user_id"])
 
     # Live Stage Counters for Menu Badges
     cnt_b = get_stage_job_count("DESIGN")
@@ -151,7 +200,6 @@ def main():
     cnt_f = get_stage_job_count("DISPATCH")
     cnt_g = get_stage_job_count("BILLING_REVIEW")
 
-    # Dynamic Workspaces Menu
     menu_options = {}
 
     if account_type in ["SUPER_ADMIN", "CEO"]:
