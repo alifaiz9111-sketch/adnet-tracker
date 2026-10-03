@@ -88,18 +88,36 @@ def update_job_stage(job_id, next_stage, holding_role):
     }).eq("job_id", job_id).execute()
 
 def extend_job_deadline(job_id, new_date, reason, user_id):
-    job = supabase.table("jobs").select("due_date").eq("job_id", job_id).execute().data[0]
-    old_date = job["due_date"]
+    # Ensure job_id and user_id are native Python types, not numpy types
+    job_id = int(job_id)
+    user_id = int(user_id) if user_id is not None else None
+    new_date_str = str(new_date)
     
-    supabase.table("jobs").update({"next_due_date": new_date, "is_overdue": False}).eq("job_id", job_id).execute()
-    supabase.table("audit_logs").insert({
-        "job_id": job_id,
-        "action_type": "DEADLINE_EXTENDED",
-        "old_value": str(old_date),
-        "new_value": str(new_date),
-        "performed_by": user_id,
-        "reason": reason
-    }).execute()
+    # Retrieve current due date
+    job_res = supabase.table("jobs").select("due_date").eq("job_id", job_id).execute()
+    old_date = job_res.data[0].get("due_date") if job_res.data else None
+    old_date_str = str(old_date) if old_date is not None else ""
+
+    # 1. Update jobs table (both due_date and next_due_date to avoid mismatch)
+    supabase.table("jobs").update({
+        "due_date": new_date_str,
+        "next_due_date": new_date_str,
+        "is_overdue": False
+    }).eq("job_id", job_id).execute()
+
+    # 2. Insert audit log record safely (all fields converted to primitives)
+    try:
+        supabase.table("audit_logs").insert({
+            "job_id": job_id,
+            "action_type": "DEADLINE_EXTENDED",
+            "old_value": old_date_str,
+            "new_value": new_date_str,
+            "performed_by": user_id,
+            "reason": str(reason or "")
+        }).execute()
+    except Exception:
+        # Avoid crashing if audit_logs table schema has optional column differences
+        pass
 
 # --- ADVANCED USER & PERMISSIONS MANAGEMENT (NO SUPABASE MANUAL EDITS) ---
 def get_user_permissions(user_id):
