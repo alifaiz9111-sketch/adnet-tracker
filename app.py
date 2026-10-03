@@ -77,7 +77,9 @@ def main():
         menu_options["🚚 6. Dispatch & Delivery"] = mod_f_dispatch.render
     if account_type == "SUPER_ADMIN" or "MOD_G" in user_perms:
         menu_options["📑 7. Billing Review"] = mod_g_billing.render
-    if account_type == "SUPER_ADMIN" or "MOD_BILL" in user_perms or account_type == "CEO":
+    if account_type == "CEO":
+        menu_options["🧾 Accounts Billing Queue"] = accounts_queue.render
+    elif account_type == "SUPER_ADMIN" or "MOD_BILL" in user_perms:
         menu_options["🧾 8. Accounts Billing Queue"] = accounts_queue.render
 
     st.sidebar.markdown("---")

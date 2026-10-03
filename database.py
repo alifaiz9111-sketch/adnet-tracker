@@ -100,3 +100,32 @@ def extend_job_deadline(job_id, new_date, reason, user_id):
         "performed_by": user_id,
         "reason": reason
     }).execute()
+
+
+    # --- ADVANCED USER & PERMISSIONS MANAGEMENT (NO SUPABASE MANUAL EDITS) ---
+
+def get_user_permissions(user_id):
+    """Fetch list of module codes assigned to a user."""
+    res = supabase.table("user_permissions").select("module_id").eq("user_id", user_id).execute()
+    return [r["module_id"] for r in res.data] if res.data else []
+
+def update_user_profile(user_id, full_name, email, password=None):
+    """Update employee personal details; optionally change password."""
+    payload = {"full_name": full_name, "email": email}
+    if password and password.strip():
+        payload["password_hash"] = password.strip()
+    supabase.table("users").update(payload).eq("user_id", user_id).execute()
+
+def update_user_modules(user_id, new_module_list):
+    """Grant or revoke module permissions dynamically."""
+    # Remove existing permissions
+    supabase.table("user_permissions").delete().eq("user_id", user_id).execute()
+    # Insert new permissions
+    if new_module_list:
+        records = [{"user_id": user_id, "module_id": m} for m in new_module_list]
+        supabase.table("user_permissions").insert(records).execute()
+
+def delete_user_account(user_id):
+    """Permanently delete an employee account and revoke their permissions."""
+    supabase.table("user_permissions").delete().eq("user_id", user_id).execute()
+    supabase.table("users").delete().eq("user_id", user_id).execute()
