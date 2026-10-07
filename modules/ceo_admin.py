@@ -5,7 +5,6 @@ from database import (
     create_user, 
     update_user_status, 
     delete_user,
-    update_user_permissions,
     extend_job_deadline, 
     delete_job_sheet,
     get_all_vendors,
@@ -116,85 +115,14 @@ def render_user_management(user):
                             is_active = u.get("is_active", True)
                             status_label = "🟢 Active" if is_active else "🔴 Inactive"
                             st.markdown(f"**Status:** {status_label}")
-                            
-                            # 1. EDIT ROLES & WORKSTATIONS POPOVER
-                            with st.popover("✏️ Edit Staff & Roles"):
-                                st.markdown(f"#### Edit: {u.get('full_name')} (`@{u.get('username')}`)")
-                                
-                                edit_name = st.text_input("Full Name", value=u.get("full_name", ""), key=f"ed_name_{u['user_id']}")
-                                edit_phone = st.text_input("Mobile / Phone", value=u.get("phone") or "", key=f"ed_ph_{u['user_id']}")
-                                edit_email = st.text_input("Email", value=u.get("email") or "", key=f"ed_em_{u['user_id']}")
-                                edit_station = st.text_input("Primary Station", value=u.get("primary_station") or "", key=f"ed_stn_{u['user_id']}")
-                                edit_can_vendor = st.checkbox("Can Manage Vendors?", value=bool(u.get("can_manage_vendors", False)), key=f"ed_vnd_{u['user_id']}")
-                                
-                                st.markdown("##### Assigned Workstations (Checklist)")
-                                cur_perms = u.get("permissions") or []
-                                
-                                e_col1, e_col2 = st.columns(2)
-                                with e_col1:
-                                    ed_mod_a = st.checkbox("📝 Sales (Mod 1)", value=("MOD_A" in cur_perms), key=f"ed_ma_{u['user_id']}")
-                                    ed_mod_b = st.checkbox("🎨 Design (Mod 2)", value=("MOD_B" in cur_perms), key=f"ed_mb_{u['user_id']}")
-                                    ed_mod_c = st.checkbox("💳 Accounts / Advance (Mod 3)", value=("MOD_C" in cur_perms), key=f"ed_mc_{u['user_id']}")
-                                    ed_mod_d = st.checkbox("⚙️ Production (Mod 4)", value=("MOD_D" in cur_perms), key=f"ed_md_{u['user_id']}")
-                                with e_col2:
-                                    ed_mod_e = st.checkbox("🔍 QC (Mod 5)", value=("MOD_E" in cur_perms), key=f"ed_me_{u['user_id']}")
-                                    ed_mod_f = st.checkbox("🚚 Dispatch (Mod 6)", value=("MOD_F" in cur_perms), key=f"ed_mf_{u['user_id']}")
-                                    ed_mod_g = st.checkbox("🧾 Billing Review (Mod 7)", value=("MOD_G" in cur_perms), key=f"ed_mg_{u['user_id']}")
-                                    ed_mod_bill = st.checkbox("💼 CA Desk (Mod 8)", value=("MOD_BILL" in cur_perms), key=f"ed_mbill_{u['user_id']}")
-                                    ed_view_bills = st.checkbox("📥 Can View & Download Bills Only", value=("VIEW_BILLS" in cur_perms), key=f"ed_vbill_{u['user_id']}")
-                                
-                                st.markdown("---")
-                                cur_acc_type = u.get("account_type", "STAFF")
-                                ed_is_manager = st.checkbox("👔 Floor Manager Role", value=(cur_acc_type == "MANAGER"), key=f"ed_mgr_{u['user_id']}")
-                                ed_is_admin = st.checkbox("👑 Executive Access", value=(cur_acc_type in ["CEO", "SUPER_ADMIN"]), key=f"ed_adm_{u['user_id']}")
-                                
-                                if st.button("Save Changes", key=f"btn_save_u_{u['user_id']}", type="primary", use_container_width=True):
-                                    new_perms = []
-                                    if ed_mod_a: new_perms.append("MOD_A")
-                                    if ed_mod_b: new_perms.append("MOD_B")
-                                    if ed_mod_c: new_perms.append("MOD_C")
-                                    if ed_mod_d: new_perms.append("MOD_D")
-                                    if ed_mod_e: new_perms.append("MOD_E")
-                                    if ed_mod_f: new_perms.append("MOD_F")
-                                    if ed_mod_g: new_perms.append("MOD_G")
-                                    if ed_mod_bill: new_perms.append("MOD_BILL")
-                                    if ed_view_bills: new_perms.append("VIEW_BILLS")
-                                    
-                                    if ed_is_admin:
-                                        target_type = "SUPER_ADMIN" if user.get("account_type") == "SUPER_ADMIN" else "CEO"
-                                    elif ed_is_manager:
-                                        target_type = "MANAGER"
-                                    elif ed_mod_bill:
-                                        target_type = "FREELANCER_CA"
-                                    else:
-                                        target_type = "STAFF"
-                                        
-                                    ok, msg = update_user_permissions(
-                                        user_id=u["user_id"],
-                                        full_name=edit_name,
-                                        phone=edit_phone,
-                                        email=edit_email,
-                                        primary_station=edit_station,
-                                        can_manage_vendors=edit_can_vendor,
-                                        permissions=new_perms,
-                                        account_type=target_type
-                                    )
-                                    if ok:
-                                        st.success("Staff profile updated.")
-                                        st.rerun()
-                                    else:
-                                        st.error(f"Update failed: {msg}")
 
-                            # 2. DEACTIVATE / REACTIVATE BUTTON
                             btn_txt = "Deactivate" if is_active else "Reactivate"
                             if st.button(btn_txt, key=f"usr_st_{u['user_id']}", use_container_width=True):
                                 update_user_status(u["user_id"], not is_active)
                                 st.rerun()
 
-                            # 3. DELETE USER POPOVER
                             with st.popover("🗑️ Delete User"):
                                 st.warning(f"Permanently remove @{u.get('username')}?")
-                                st.caption("If you just want to block login, use 'Deactivate' instead.")
                                 if st.button("Confirm Delete", key=f"del_u_{u['user_id']}", type="primary", use_container_width=True):
                                     delete_user(u["user_id"])
                                     st.success(f"User @{u.get('username')} deleted.")
@@ -227,11 +155,9 @@ def render_user_management(user):
                 station = st.text_input("Primary Station / Department", placeholder="e.g. Solvent Machine 1, Flatbed Laser, Dispatch Godown").strip()
             with f2:
                 st.markdown("<br>", unsafe_allow_html=True)
-                can_manage_vendors = st.checkbox("Can Manage / Assign Vendors?", help="Check this if this employee can assign outsourced work to third-party vendors.")
+                can_manage_vendors = st.checkbox("Can Manage / Assign Vendors?", help="Check if this employee can outsource work.")
 
-            st.markdown("#### 4. Assigned Roles & Workstation Desks (Checklist)")
-            st.caption("Check all workstation modules this employee is authorized to access:")
-
+            st.markdown("#### 4. Assigned Workstation Desks (Checklist)")
             r1, r2 = st.columns(2)
             with r1:
                 mod_a = st.checkbox("📝 Sales & Intake (Module 1)")
@@ -242,19 +168,17 @@ def render_user_management(user):
             with r2:
                 mod_e = st.checkbox("🔍 Quality Check - QC (Module 5)")
                 mod_f = st.checkbox("🚚 Dispatch & Field Delivery (Module 6)")
-                mod_g = st.checkbox("🧾 Billing Review (Module 7)")
-                mod_bill = st.checkbox("💼 CA Desk - GST Invoicing (Module 8)")
-                can_view_bills = st.checkbox("📥 Can View & Download Bills Only")
+                mod_g = st.checkbox("🧾 Billing & Settlement (Module 7)")
 
             st.markdown("---")
-            is_manager_role = st.checkbox("👔 Floor Manager Role (Full visibility across all stages, specs, and holding in-charges)")
-            is_management = st.checkbox("👑 Executive / Management Level Access (Access to Reports & User Admin)")
+            is_manager_role = st.checkbox("👔 Floor Manager Role (Full floor tracking visibility)")
+            is_management = st.checkbox("👑 Executive / Management Level Access (Admin)")
 
             submit = st.form_submit_button("Create Employee Profile", type="primary", use_container_width=True)
 
             if submit:
                 if not (new_name and new_phone and emp_code and new_username and new_password):
-                    st.error("Please fill in all mandatory fields (Full Name, Phone, Employee Code, Username, and Password).")
+                    st.error("Please fill in all mandatory fields.")
                 else:
                     permissions = []
                     if mod_a: permissions.append("MOD_A")
@@ -264,15 +188,11 @@ def render_user_management(user):
                     if mod_e: permissions.append("MOD_E")
                     if mod_f: permissions.append("MOD_F")
                     if mod_g: permissions.append("MOD_G")
-                    if mod_bill: permissions.append("MOD_BILL")
-                    if can_view_bills: permissions.append("VIEW_BILLS")
 
                     if is_management:
                         account_type = "SUPER_ADMIN" if user.get("account_type") == "SUPER_ADMIN" else "CEO"
                     elif is_manager_role:
                         account_type = "MANAGER"
-                    elif mod_bill:
-                        account_type = "FREELANCER_CA"
                     else:
                         account_type = "STAFF"
 
@@ -307,4 +227,49 @@ def render_user_management(user):
                     v_name = st.text_input("Vendor / Company Name *", placeholder="e.g. Balaji Offset Printers").strip()
                     v_contact = st.text_input("Contact Person", placeholder="e.g. Ramesh Agarwal").strip()
                     v_phone = st.text_input("Phone / Mobile Number", placeholder="e.g. 9830112233").strip()
-                with v_col
+                with v_col2:
+                    v_category = st.text_input("Specialization / Category", placeholder="e.g. Offset Commercial, Laser Cutting").strip()
+                    v_city = st.text_input("City", value="Kolkata").strip()
+
+                if st.form_submit_button("Add Vendor to Directory", type="primary", use_container_width=True):
+                    if not v_name:
+                        st.error("Vendor Name is mandatory.")
+                    else:
+                        ok, msg = create_vendor(v_name, v_contact, v_phone, v_category, v_city)
+                        if ok:
+                            st.success(f"Vendor '{v_name}' added successfully!")
+                            st.rerun()
+                        else:
+                            st.error(f"Failed to add vendor: {msg}")
+
+        st.markdown("---")
+
+        vendors = get_all_vendors()
+        if not vendors:
+            st.info("No vendors registered in the directory.")
+        else:
+            for v in vendors:
+                with st.container(border=True):
+                    c1, c2, c3 = st.columns([2.5, 2, 1.5])
+                    with c1:
+                        st.markdown(f"### 🏭 {v.get('vendor_name')}")
+                        st.caption(f"👤 Contact Person: `{v.get('contact_person') or 'N/A'}` | 📱 Phone: `{v.get('phone') or 'N/A'}`")
+                    with c2:
+                        st.markdown(f"**Specialization:** `{v.get('category') or 'General Job-Work'}`")
+                        st.caption(f"📍 City: `{v.get('city') or 'Kolkata'}`")
+                    with c3:
+                        is_active = v.get("is_active", True)
+                        status_label = "🟢 Active" if is_active else "🔴 Inactive"
+                        st.markdown(f"**Status:** {status_label}")
+
+                        btn_txt = "Deactivate" if is_active else "Reactivate"
+                        if st.button(btn_txt, key=f"vnd_st_{v['vendor_id']}", use_container_width=True):
+                            update_vendor_status(v["vendor_id"], not is_active)
+                            st.rerun()
+
+                        with st.popover("🗑️ Delete Vendor"):
+                            st.warning(f"Permanently delete '{v.get('vendor_name')}'?")
+                            if st.button("Confirm Delete", key=f"del_v_{v['vendor_id']}", type="primary", use_container_width=True):
+                                delete_vendor(v["vendor_id"])
+                                st.success(f"Vendor '{v.get('vendor_name')}' deleted.")
+                                st.rerun()
