@@ -291,3 +291,14 @@ def update_user_permissions(user_id, full_name, phone, email, primary_station, c
         return True, "Profile updated successfully."
     except Exception as e:
         return False, str(e)
+
+def get_user_created_jobs(user_name, is_management=False):
+    """Fetches jobs created by a specific user, or all jobs if management."""
+    try:
+        query = supabase.table("jobs").select("*").order("job_id", desc=True)
+        if not is_management:
+            query = query.eq("order_taken_by", user_name)
+        res = query.execute()
+        return res.data or []
+    except Exception:
+        return []
