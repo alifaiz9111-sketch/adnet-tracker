@@ -52,8 +52,8 @@ def render_overview(user):
         with st.container(border=True):
             c1, c2, c3 = st.columns([2, 2, 1])
             with c1:
-                st.markdown(f"**Job #{job['job_no']} - {job['client_name']}**")
-                st.caption(f"Stage: `{job['current_stage']}` | Due: `{job['due_date']}`")
+                st.markdown(f"**Job #{job.get('job_no')} - {job.get('client_name')}**")
+                st.caption(f"Stage: `{job.get('current_stage')}` | Due: `{job.get('due_date')}`")
             with c2:
                 with st.popover("📅 Extend Target Delivery Date"):
                     new_due = st.date_input("New Target Date", key=f"due_{job['job_id']}")
@@ -97,11 +97,11 @@ def render_user_management(user):
                     c1, c2, c3 = st.columns([2.5, 2, 1.5])
                     with c1:
                         emp_badge = f"`[{u.get('emp_code')}]` " if u.get("emp_code") else ""
-                        st.markdown(f"### {emp_badge}{u['full_name']}")
-                        st.caption(f"👤 Username: `@{u['username']}` | 📱 Mobile: `{u.get('phone', 'N/A')}`")
+                        st.markdown(f"### {emp_badge}{u.get('full_name')}")
+                        st.caption(f"👤 Username: `@{u.get('username')}` | 📱 Mobile: `{u.get('phone', 'N/A')}`")
                         if u.get("email"):
-                            st.caption(f"✉️ Email: `{u['email']}`")
-                        st.caption(f"Role: `{u['account_type']}` | Last Login: `{u.get('last_login', 'Never')}`")
+                            st.caption(f"✉️ Email: `{u.get('email')}`")
+                        st.caption(f"Role: `{u.get('account_type')}` | Last Login: `{u.get('last_login', 'Never')}`")
                     
                     with c2:
                         st.markdown(f"**Primary Station:** `{u.get('primary_station', 'Unassigned')}`")
@@ -110,7 +110,7 @@ def render_user_management(user):
                         st.write(f"**Allowed Modules:** {', '.join(u.get('permissions', []) or ['None'])}")
 
                     with c3:
-                        if u["username"] == "admin":
+                        if u.get("username") == "admin":
                             st.info("System Root Account")
                         else:
                             is_active = u.get("is_active", True)
@@ -119,7 +119,7 @@ def render_user_management(user):
                             
                             # 1. EDIT ROLES & WORKSTATIONS POPOVER
                             with st.popover("✏️ Edit Staff & Roles"):
-                                st.markdown(f"#### Edit: {u['full_name']} (`@{u['username']}`)")
+                                st.markdown(f"#### Edit: {u.get('full_name')} (`@{u.get('username')}`)")
                                 
                                 edit_name = st.text_input("Full Name", value=u.get("full_name", ""), key=f"ed_name_{u['user_id']}")
                                 edit_phone = st.text_input("Mobile / Phone", value=u.get("phone") or "", key=f"ed_ph_{u['user_id']}")
@@ -193,11 +193,11 @@ def render_user_management(user):
 
                             # 3. DELETE USER POPOVER
                             with st.popover("🗑️ Delete User"):
-                                st.warning(f"Permanently remove @{u['username']}?")
+                                st.warning(f"Permanently remove @{u.get('username')}?")
                                 st.caption("If you just want to block login, use 'Deactivate' instead.")
                                 if st.button("Confirm Delete", key=f"del_u_{u['user_id']}", type="primary", use_container_width=True):
                                     delete_user(u["user_id"])
-                                    st.success(f"User @{u['username']} deleted.")
+                                    st.success(f"User @{u.get('username')} deleted.")
                                     st.rerun()
 
     # --- TAB 2: ADD NEW STAFF MEMBER ---
@@ -307,50 +307,4 @@ def render_user_management(user):
                     v_name = st.text_input("Vendor / Company Name *", placeholder="e.g. Balaji Offset Printers").strip()
                     v_contact = st.text_input("Contact Person", placeholder="e.g. Ramesh Agarwal").strip()
                     v_phone = st.text_input("Phone / Mobile Number", placeholder="e.g. 9830112233").strip()
-                with v_col2:
-                    v_category = st.text_input("Specialization / Category", placeholder="e.g. Offset Commercial, Laser Cutting, Neon Signage").strip()
-                    v_city = st.text_input("City", value="Kolkata").strip()
-
-                if st.form_submit_button("Add Vendor to Directory", type="primary", use_container_width=True):
-                    if not v_name:
-                        st.error("Vendor Name is mandatory.")
-                    else:
-                        ok, msg = create_vendor(v_name, v_contact, v_phone, v_category, v_city)
-                        if ok:
-                            st.success(f"Vendor '{v_name}' added successfully!")
-                            st.rerun()
-                        else:
-                            st.error(f"Failed to add vendor: {msg}")
-
-        st.markdown("---")
-
-        vendors = get_all_vendors()
-        if not vendors:
-            st.info("No vendors registered in the directory.")
-        else:
-            for v in vendors:
-                with st.container(border=True):
-                    c1, c2, c3 = st.columns([2.5, 2, 1.5])
-                    with c1:
-                        st.markdown(f"### 🏭 {v['vendor_name']}")
-                        st.caption(f"👤 Contact Person: `{v.get('contact_person') or 'N/A'}` | 📱 Phone: `{v.get('phone') or 'N/A'}`")
-                    with c2:
-                        st.markdown(f"**Specialization:** `{v.get('category') or 'General Job-Work'}`")
-                        st.caption(f"📍 City: `{v.get('city') or 'Kolkata'}`")
-                    with c3:
-                        is_active = v.get("is_active", True)
-                        status_label = "🟢 Active" if is_active else "🔴 Inactive"
-                        st.markdown(f"**Status:** {status_label}")
-
-                        btn_txt = "Deactivate" if is_active else "Reactivate"
-                        if st.button(btn_txt, key=f"vnd_st_{v['vendor_id']}", use_container_width=True):
-                            update_vendor_status(v["vendor_id"], not is_active)
-                            st.rerun()
-
-                        with st.popover("🗑️ Delete Vendor"):
-                            st.warning(f"Permanently delete '{v['vendor_name']}'?")
-                            st.caption("Past job references might be affected if deleted.")
-                            if st.button("Confirm Delete", key=f"del_v_{v['vendor_id']}", type="primary", use_container_width=True):
-                                delete_vendor(v["vendor_id"])
-                                st.success(f"Vendor '{v['vendor_name']}' deleted.")
-                                st.rerun()
+                with v_col

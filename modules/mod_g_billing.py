@@ -1,9 +1,9 @@
 import streamlit as st
-from database import supabase
+from database import supabase, get_job_items, authorize_gst_billing, complete_nongst_billing
 
 def render(user):
     st.subheader("🧾 Module 7: Billing Review Desk")
-    st.caption("Review delivered orders, select billing classification (GST vs Non-GST), and authorize completion or CA queue.")
+    st.caption("Review completed delivery jobs, classify billing type (GST vs Non-GST), and route accordingly.")
 
     try:
         res = (
@@ -23,13 +23,7 @@ def render(user):
         return
 
     for job in jobs:
-        # Fetch items directly without database helper
-        try:
-            it_res = supabase.table("job_items").select("*").eq("job_id", job["job_id"]).execute()
-            items = it_res.data or []
-        except Exception:
-            items = []
-
+        items = get_job_items(job["job_id"])
         total_val = sum(float(it.get("amount", 0) or 0) for it in items)
 
         with st.container(border=True):
@@ -49,7 +43,6 @@ def render(user):
 
             st.markdown("---")
 
-            # GST vs Non-GST Selection & Actions
             act_col1, act_col2 = st.columns([2, 3])
             with act_col1:
                 billing_type = st.radio(
@@ -61,28 +54,20 @@ def render(user):
 
             with act_col2:
                 if billing_type == "GST":
-                    st.caption("ℹ️ Pushes this job to CA Desk for GST Invoicing.")
-                    if st.button("Authorize", key=f"auth_gst_{job['job_id']}", type="primary", use_container_width=True):
-                        try:
-                            supabase.table("jobs").update({
-                                "current_stage": "BILLING_QUEUE",
-                                "billing_type": "GST",
-                                "is_billed": False
-                            }).eq("job_id", int(job["job_id"])).execute()
-                            st.success(f"Job #{job.get('job_no')} authorized for GST invoicing.")
+                    st.caption("ℹ️ Pushes this job to CA Desk (Module 8) for GST Tax Invoicing.")
+                    if st.button("Authorize GST Invoicing", key=f"auth_gst_{job['job_id']}", type="primary", use_container_width=True):
+                        ok, msg = authorize_gst_billing(job["job_id"], user["full_name"])
+                        if ok:
+                            st.success(f"Job #{job.get('job_no')} routed to CA Desk.")
                             st.rerun()
-                        except Exception as e:
-                            st.error(f"Error: {e}")
+                        else:
+                            st.error(f"Failed to authorize: {msg}")
                 else:
                     st.caption("ℹ️ Non-GST settles directly and marks the job Completed.")
                     if st.button("Complete & Settle Job (Non-GST)", key=f"settle_nongst_{job['job_id']}", type="primary", use_container_width=True):
-                        try:
-                            supabase.table("jobs").update({
-                                "current_stage": "SETTLED",
-                                "billing_type": "NON_GST",
-                                "is_billed": True
-                            }).eq("job_id", int(job["job_id"])).execute()
-                            st.success(f"Job #{job.get('job_no')} marked as Settled.")
+                        ok, msg = complete_nongst_billing(job["job_id"], user["full_name"])
+                        if ok:
+                            st.success(f"Job #{job.get('job_no')} settled successfully.")
                             st.rerun()
-                        except Exception as e:
-                            st.error(f"Error: {e}")
+                        else:
+                            st.error(f"Failed to settle: {msg}")

@@ -1,73 +1,96 @@
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 import streamlit as st
+from database import supabase, get_job_items
 
-def send_ceo_order_alert(job_no, client_name, job_items, total_est_amount, user_name):
-    """Dispatches order commercial details directly to the CEO via Gmail SMTP."""
+def render(user):
+    st.subheader("📊 Accounts Ledger & Settlement Queue")
+    st.caption(f"Finance Desk Officer: **{user['full_name']}** | Role: `{user.get('account_type')}`")
+
     try:
-        cfg = st.secrets.get("ceo_email", {})
-        sender_email = cfg.get("sender_email")
-        sender_password = cfg.get("sender_password")
-        smtp_server = cfg.get("smtp_server", "smtp.gmail.com")
-        smtp_port = int(cfg.get("smtp_port", 587))
-        recipient_email = cfg.get("ceo_recipient")
-
-        if not all([sender_email, sender_password, recipient_email]):
-            return False, "SMTP configuration missing in secrets.toml"
-
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"🔔 [New Order Alert] Job #{job_no} - {client_name}"
-        msg["From"] = sender_email
-        msg["To"] = recipient_email
-
-        items_table_rows = "".join([
-            f"""<tr>
-                <td style="padding: 8px; border: 1px solid #ddd;">{item.get('item_name', '')}</td>
-                <td style="padding: 8px; border: 1px solid #ddd;">{item.get('quantity', 0)} {item.get('unit', '')}</td>
-                <td style="padding: 8px; border: 1px solid #ddd;">₹ {float(item.get('rate', 0)):,.2f}</td>
-                <td style="padding: 8px; border: 1px solid #ddd;">₹ {float(item.get('amount', 0)):,.2f}</td>
-            </tr>"""
-            for item in job_items
-        ])
-
-        html_content = f"""
-        <html>
-            <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
-                <h2 style="color: #E10600;">AdNet Print Tracker - Order Confirmation</h2>
-                <p>A new job sheet has been logged by <strong>{user_name}</strong>.</p>
-                <hr style="border: 0; border-top: 1px solid #eee;" />
-                <table style="width: 100%; margin-bottom: 20px;">
-                    <tr><td><strong>Job Number:</strong> #{job_no}</td></tr>
-                    <tr><td><strong>Client:</strong> {client_name}</td></tr>
-                    <tr><td><strong>Total Order Value:</strong> ₹ {float(total_est_amount):,.2f}</td></tr>
-                </table>
-                <h3>Commercial Item Breakdown:</h3>
-                <table style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr style="background-color: #f8f8f8;">
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Item</th>
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Qty</th>
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Rate</th>
-                            <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Amount</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {items_table_rows}
-                    </tbody>
-                </table>
-                <br>
-                <p style="font-size: 12px; color: #777;">This is an automated notification from AdNet Print ERP.</p>
-            </body>
-        </html>
-        """
-        msg.attach(MIMEText(html_content, "html"))
-
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
-            server.starttls()
-            server.login(sender_email, sender_password)
-            server.sendmail(sender_email, recipient_email, msg.as_string())
-
-        return True, "Alert sent successfully"
+        res = (
+            supabase.table("jobs")
+            .select("*")
+            .order("job_id", desc=True)
+            .execute()
+        )
+        all_jobs = res.data or []
     except Exception as e:
-        return False, str(e)
+        st.error(f"Error fetching ledger records: {e}")
+        return
+
+    if not all_jobs:
+        st.info("No job records available in the finance queue.")
+        return
+
+    # Categorize accounts
+    unpaid_advance = [j for j in all_jobs if j.get("current_stage") == "PAYMENT"]
+    in_production = [j for j in all_jobs if j.get("current_stage") in ["PRODUCTION", "QC", "DISPATCH"]]
+    pending_billing = [j for j in all_jobs if j.get("current_stage") in ["BILLING_REVIEW", "BILLING_QUEUE"]]
+    settled = [j for j in all_jobs if j.get("current_stage") == "SETTLED"]
+
+    # KPI Metrics
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.metric("Pending Advance", len(unpaid_advance))
+    with c2:
+        st.metric("WIP Floor Value", len(in_production))
+    with c3:
+        st.metric("In Invoicing Queue", len(pending_billing))
+    with c4:
+        st.metric("Settled & Closed", len(settled))
+
+    st.markdown("---")
+
+    t_advance, t_settled = st.tabs(["💳 Pending Advance Queue", "🗄️ Settled Accounts Ledger"])
+
+    with t_advance:
+        st.markdown("#### Orders Awaiting Advance Confirmation")
+        if not unpaid_advance:
+            st.info("No orders awaiting advance payment.")
+        else:
+            for job in unpaid_advance:
+                items = get_job_items(job["job_id"])
+                total_val = sum(float(it.get("amount", 0) or 0) for it in items)
+
+                with st.container(border=True):
+                    col1, col2, col3 = st.columns([2.5, 2, 1.5])
+                    with col1:
+                        st.markdown(f"**Job #{job.get('job_no')} — {job.get('client_name')}**")
+                        st.caption(f"Contact: `{job.get('contact_person') or 'N/A'}` | 📱 `{job.get('contact_phone') or 'N/A'}`")
+                        st.caption(f"Booked By: `{job.get('order_taken_by') or 'N/A'}` | Due: `{job.get('due_date')}`")
+                    with col2:
+                        st.markdown(f"**Total Order Value:** ₹ {total_val:,.2f}")
+                        for it in items:
+                            st.caption(f"• {it.get('item_name')} ({it.get('quantity')} {it.get('unit')})")
+                    with col3:
+                        with st.popover("Clear Advance"):
+                            rec_amount = st.number_input("Received (₹)", min_value=0.0, value=float(total_val), key=f"q_amt_{job['job_id']}")
+                            if st.button("Confirm & Release", key=f"q_btn_{job['job_id']}", type="primary"):
+                                supabase.table("jobs").update({
+                                    "current_stage": "PRODUCTION",
+                                    "is_returned": False
+                                }).eq("job_id", int(job["job_id"])).execute()
+                                st.success("Job released to production.")
+                                st.rerun()
+
+    with t_settled:
+        st.markdown("#### Closed Accounts Archive")
+        if not settled:
+            st.info("No settled accounts found.")
+        else:
+            for job in settled:
+                items = get_job_items(job["job_id"])
+                total_val = sum(float(it.get("amount", 0) or 0) for it in items)
+                b_type = job.get("billing_type", "NON_GST")
+
+                with st.container(border=True):
+                    col1, col2, col3 = st.columns([2.5, 2, 1.5])
+                    with col1:
+                        st.markdown(f"**Job #{job.get('job_no')} — {job.get('client_name')}** `[{b_type}]`")
+                        st.caption(f"Contact: `{job.get('contact_person') or 'N/A'}` | Billed By: `{job.get('invoice_uploaded_by') or 'System'}`")
+                    with col2:
+                        st.markdown(f"**Settled Value:** ₹ {total_val:,.2f}")
+                    with col3:
+                        if job.get("invoice_file_url"):
+                            st.link_button("📥 Tax Invoice", job["invoice_file_url"], use_container_width=True)
+                        else:
+                            st.caption("✅ Non-GST Settled")

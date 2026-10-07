@@ -5,6 +5,7 @@ def render(user):
     st.subheader("📋 Floor Operations & Multi-Filter Job Track")
     st.caption("Live monitoring of all active and past jobs across every stage, assignee/in-charge, and specifications.")
 
+    # Fetch all jobs from Supabase
     try:
         res = supabase.table("jobs").select("*").order("job_id", desc=True).execute()
         all_jobs = res.data or []
@@ -29,6 +30,7 @@ def render(user):
         f_taken_by = st.text_input("Order Taken By", placeholder="e.g. Rahul").strip().lower()
         f_due_date = st.date_input("Target Delivery Date", value=None)
 
+    # Filter Logic
     filtered_jobs = []
     for j in all_jobs:
         if f_job_no and f_job_no not in str(j.get("job_no", "")).lower():
@@ -60,6 +62,7 @@ def render(user):
         "SETTLED": ("🗄️ Billed & Settled", "#238636")
     }
 
+    # Job Cards Rendering
     for job in filtered_jobs:
         curr_stage = job.get("current_stage", "UNKNOWN")
         stage_label, stage_color = stage_display_map.get(curr_stage, (curr_stage, "#8B949E"))

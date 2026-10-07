@@ -1,62 +1,83 @@
-from datetime import datetime
-import pytz
 import streamlit as st
-from database import get_jobs_by_stage, get_job_items, update_job_stage, return_job_to_stage
-
-IST = pytz.timezone("Asia/Kolkata")
+from database import supabase, get_job_items
 
 def render(user):
-    st.subheader("🔍 Module 5: Quality Check (QC)")
-    st.caption("Inspect physical dimensions, finish, color fidelity, and packaging.")
+    st.subheader("🔍 Module 5: Quality Check (QC) Desk")
+    st.caption(f"QC Inspector: **{user['full_name']}** | Role: `{user.get('account_type')}`")
 
-    jobs = get_jobs_by_stage("QC")
+    # Fetch jobs pending Quality Check
+    try:
+        res = (
+            supabase.table("jobs")
+            .select("*")
+            .eq("current_stage", "QC")
+            .order("job_id")
+            .execute()
+        )
+        jobs = res.data or []
+    except Exception as e:
+        st.error(f"Error fetching QC queue: {e}")
+        return
+
     if not jobs:
-        st.info("No jobs awaiting quality inspection.")
+        st.info("No jobs pending quality inspection on the QC desk.")
         return
 
     for job in jobs:
         items = get_job_items(job["job_id"])
+        total_val = sum(float(it.get("amount", 0) or 0) for it in items)
 
         with st.container(border=True):
-            st.markdown(f"### Job #{job['job_no']} - {job['client_name']}")
-            st.caption(f"Target Due: `{job['due_date']}`")
+            c1, c2, c3 = st.columns([2.5, 2.5, 2])
+            with c1:
+                st.markdown(f"### Job #{job.get('job_no')} - {job.get('client_name')}")
+                st.caption(f"👤 Contact: `{job.get('contact_person') or 'N/A'}` | 📱 `{job.get('contact_phone') or 'N/A'}`")
+                st.caption(f"📅 Due Date: `{job.get('due_date')}` | Booked By: `{job.get('order_taken_by') or 'N/A'}`")
+                if job.get("is_returned"):
+                    st.error(f"⚠️ Past Return: {job.get('return_reason')}")
+            with c2:
+                st.markdown("##### 📦 Inspection Checklist")
+                for idx, it in enumerate(items, 1):
+                    st.markdown(f"**{idx}. {it.get('item_name')}** — `{it.get('quantity')} {it.get('unit')}`")
+                    if it.get("specifications"):
+                        st.caption(f"&nbsp;&nbsp;📐 **Specs to Validate:** {it.get('specifications')}")
+            with c3:
+                st.metric("Total Order Value", f"₹ {total_val:,.2f}")
 
-            st.markdown("**Items under inspection:**")
-            for it in items:
-                st.write(f"- {it['item_name']} | Qty: {it['quantity']} | Specs: {it.get('specifications','')}")
+                # Action 1: Approve and Pass to Dispatch
+                with st.popover("✅ Approve & Send to Dispatch"):
+                    st.markdown("#### Quality Clearance Sign-Off")
+                    st.checkbox("Colors, print resolution & saturation verified", key=f"qc_chk1_{job['job_id']}")
+                    st.checkbox("Cutting, lamination, and fabrication accurate", key=f"qc_chk2_{job['job_id']}")
+                    st.checkbox("Packed and ready for transit", key=f"qc_chk3_{job['job_id']}")
+                    
+                    if st.button("Pass QC & Dispatch", key=f"btn_pass_qc_{job['job_id']}", type="primary", use_container_width=True):
+                        try:
+                            supabase.table("jobs").update({
+                                "current_stage": "DISPATCH",
+                                "is_returned": False
+                            }).eq("job_id", int(job["job_id"])).execute()
+                            st.success(f"Job #{job.get('job_no')} passed QC and routed to Dispatch.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to update stage: {e}")
 
-            with st.form(f"qc_form_{job['job_id']}"):
-                st.markdown("##### Inspection Checkpoints")
-                c1, c2, c3, c4 = st.columns(4)
-                with c1:
-                    chk_size = st.checkbox("Dimensions & Bleed Checked", key=f"chk1_{job['job_id']}")
-                with c2:
-                    chk_color = st.checkbox("Color Match & Print Quality", key=f"chk2_{job['job_id']}")
-                with c3:
-                    chk_finish = st.checkbox("Lamination & Eyelets / Trim", key=f"chk3_{job['job_id']}")
-                with c4:
-                    chk_pack = st.checkbox("Quantity Count & Packaging", key=f"chk4_{job['job_id']}")
-
-                remarks = st.text_input("QC Remarks / Defect Notes", key=f"qcnote_{job['job_id']}")
-                btn_pass, btn_reject = st.columns(2)
-
-                with btn_pass:
-                    pass_submit = st.form_submit_button("✅ PASS & Move to Dispatch", type="primary", use_container_width=True)
-                with btn_reject:
-                    reject_submit = st.form_submit_button("❌ REJECT & Return to Production", use_container_width=True)
-
-                if pass_submit:
-                    if not (chk_size and chk_color and chk_finish and chk_pack):
-                        st.error("All 4 inspection criteria must be verified before passing QC.")
-                    else:
-                        update_job_stage(job["job_id"], "DISPATCH", user["full_name"], f"QC Passed: {remarks}")
-                        st.success(f"Job #{job['job_no']} moved to Dispatch Desk.")
-                        st.rerun()
-
-                if reject_submit:
-                    if not remarks.strip():
-                        st.error("Please provide defect notes explaining the rejection.")
-                    else:
-                        return_job_to_stage(job["job_id"], "PRODUCTION", f"QC REJECTED: {remarks}", user["full_name"])
-                        st.warning(f"Job #{job['job_no']} returned to Production Floor.")
-                        st.rerun()
+                # Action 2: Fail QC / Return to Production Floor
+                with st.popover("❌ Defect Reject (Send to Production)"):
+                    st.markdown("#### Reject & Return for Rework")
+                    defect_reason = st.text_area("Defect Description / Rework Instructions *", placeholder="e.g. Scratches on acrylic, misaligned grommets, wrong vinyl finish", key=f"qc_rej_{job['job_id']}")
+                    if st.button("Reject & Return to Floor", key=f"btn_rej_qc_{job['job_id']}", type="primary", use_container_width=True):
+                        if not defect_reason.strip():
+                            st.error("Please explain the defect before rejecting.")
+                        else:
+                            try:
+                                supabase.table("jobs").update({
+                                    "current_stage": "PRODUCTION",
+                                    "is_returned": True,
+                                    "returned_by": f"{user['full_name']} (QC Desk)",
+                                    "return_reason": defect_reason.strip()
+                                }).eq("job_id", int(job["job_id"])).execute()
+                                st.warning(f"Job #{job.get('job_no')} returned to Production floor for rework.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Failed to reject job: {e}")

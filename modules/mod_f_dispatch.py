@@ -1,70 +1,83 @@
-from datetime import datetime
-import pytz
 import streamlit as st
-from database import get_jobs_by_stage, get_job_items, update_job_stage, return_job_to_stage, supabase
-
-IST = pytz.timezone("Asia/Kolkata")
+from database import supabase, get_job_items
 
 def render(user):
-    st.subheader("🚚 Module 6: Dispatch & Line Item Delivery")
-    st.caption("Verify delivery item by item and record gate passes or challans.")
+    st.subheader("🚚 Module 6: Dispatch, Delivery & Challan Desk")
+    st.caption(f"Dispatch Officer: **{user['full_name']}** | Role: `{user.get('account_type')}`")
 
-    jobs = get_jobs_by_stage("DISPATCH")
+    # Fetch jobs pending delivery/dispatch
+    try:
+        res = (
+            supabase.table("jobs")
+            .select("*")
+            .eq("current_stage", "DISPATCH")
+            .order("job_id")
+            .execute()
+        )
+        jobs = res.data or []
+    except Exception as e:
+        st.error(f"Error fetching dispatch queue: {e}")
+        return
+
     if not jobs:
-        st.info("No orders currently at the Dispatch Desk.")
+        st.info("No orders pending dispatch or delivery.")
         return
 
     for job in jobs:
         items = get_job_items(job["job_id"])
+        total_val = sum(float(it.get("amount", 0) or 0) for it in items)
+        all_delivered = len(items) > 0 and all(it.get("is_delivered") for it in items)
 
         with st.container(border=True):
-            c1, c2, c3 = st.columns([2, 2, 1])
+            c1, c2, c3 = st.columns([2.5, 2.5, 2])
             with c1:
-                st.markdown(f"### Job #{job['job_no']} - {job['client_name']}")
-                st.caption(f"Due Date: `{job['due_date']}`")
+                st.markdown(f"### Job #{job.get('job_no')} - {job.get('client_name')}")
+                st.caption(f"👤 Contact: `{job.get('contact_person') or 'N/A'}` | 📱 `{job.get('contact_phone') or 'N/A'}`")
+                st.caption(f"📅 Target Date: `{job.get('due_date')}` | Booked By: `{job.get('order_taken_by') or 'N/A'}`")
             with c2:
-                st.markdown(f"**Recipient Contact:** {job.get('contact_person', 'N/A')} ({job.get('contact_phone', 'N/A')})")
+                st.markdown("##### 📦 Items & Destination Addresses")
+                for it in items:
+                    del_badge = "✅ Delivered" if it.get("is_delivered") else "⏳ In Transit"
+                    st.markdown(f"• **{it.get('item_name')}** ({it.get('quantity')} {it.get('unit')}) — `{del_badge}`")
+                    if it.get("delivery_address"):
+                        st.caption(f"&nbsp;&nbsp;📍 Destination: {it.get('delivery_address')}")
             with c3:
-                with st.popover("↩️ Return to QC"):
-                    reason = st.text_area("Reason", key=f"ret_disp_{job['job_id']}")
-                    if st.button("Confirm Return", key=f"btn_ret_d_{job['job_id']}", type="primary"):
-                        if reason.strip():
-                            return_job_to_stage(job["job_id"], "QC", reason, user["full_name"])
+                st.metric("Total Order Value", f"₹ {total_val:,.2f}")
+
+                # Item-level delivery confirmation
+                with st.popover("📝 Update Item Deliveries"):
+                    st.markdown("#### Confirm Delivery Status")
+                    for it in items:
+                        curr_status = bool(it.get("is_delivered", False))
+                        new_status = st.checkbox(
+                            f"Mark '{it.get('item_name')}' Delivered",
+                            value=curr_status,
+                            key=f"chk_del_{it['item_id']}"
+                        )
+                        if new_status != curr_status:
+                            try:
+                                supabase.table("job_items").update({
+                                    "is_delivered": new_status
+                                }).eq("item_id", it["item_id"]).execute()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error updating item: {e}")
+
+                # Handover to Billing Review
+                with st.popover("🚀 Send to Billing Review"):
+                    st.markdown("#### Delivery Completion Handover")
+                    challan_no = st.text_input("Delivery Challan / Tracking Ref #", placeholder="e.g. DC-2026-902", key=f"dc_{job['job_id']}")
+                    runner_name = st.text_input("Driver / Delivery Person", placeholder="e.g. Subhash Logistics", key=f"run_{job['job_id']}")
+                    
+                    if st.button("Complete Dispatch & Push to Billing", key=f"btn_dsp_{job['job_id']}", type="primary", use_container_width=True):
+                        try:
+                            # Auto-mark all line items delivered upon final handover
+                            supabase.table("job_items").update({"is_delivered": True}).eq("job_id", job["job_id"]).execute()
+                            supabase.table("jobs").update({
+                                "current_stage": "BILLING_REVIEW",
+                                "is_returned": False
+                            }).eq("job_id", int(job["job_id"])).execute()
+                            st.success(f"Job #{job.get('job_no')} passed to Billing Review.")
                             st.rerun()
-
-            st.markdown("---")
-            st.markdown("##### Line Items Delivery Confirmation")
-            item_status_map = {}
-
-            for it in items:
-                col_i, col_d, col_c = st.columns([2, 3, 1])
-                with col_i:
-                    st.write(f"**{it['item_name']}** (Qty: {it['quantity']} {it['unit']})")
-                with col_d:
-                    st.caption(f"📍 Address: {it.get('delivery_address', 'Self Pickup')}")
-                with col_c:
-                    is_del = st.checkbox("Delivered", value=it.get("is_delivered", False), key=f"del_{it['item_id']}")
-                    item_status_map[it["item_id"]] = is_del
-
-            with st.form(f"dispatch_form_{job['job_id']}"):
-                col_x, col_y = st.columns(2)
-                with col_x:
-                    challan_no = st.text_input("Delivery Challan / Gate Pass #")
-                    delivery_agent = st.text_input("Delivery Boy / Transporter Name")
-                with col_y:
-                    vehicle_no = st.text_input("Vehicle Number")
-                    pod_notes = st.text_input("Proof of Delivery Remarks")
-
-                if st.form_submit_button("Update Delivery & Forward to Billing Review", type="primary", use_container_width=True):
-                    # Persist line items delivery status
-                    now_iso = datetime.now(IST).isoformat()
-                    for it_id, del_val in item_status_map.items():
-                        supabase.table("job_items").update({
-                            "is_delivered": del_val,
-                            "delivered_at": now_iso if del_val else None
-                        }).eq("item_id", it_id).execute()
-
-                    audit_msg = f"Challan: {challan_no} | Agent: {delivery_agent} | Veh: {vehicle_no} | Notes: {pod_notes}"
-                    update_job_stage(job["job_id"], "BILLING_REVIEW", user["full_name"], audit_msg)
-                    st.success(f"Job #{job['job_no']} forwarded to Billing Review.")
-                    st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to route job: {e}")

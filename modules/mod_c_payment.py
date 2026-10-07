@@ -1,17 +1,26 @@
-from datetime import datetime
-import pytz
 import streamlit as st
-from database import get_jobs_by_stage, get_job_items, update_job_stage, return_job_to_stage
-
-IST = pytz.timezone("Asia/Kolkata")
+from database import supabase, get_job_items
 
 def render(user):
-    st.subheader("💳 Module 3: Advance & Commercial Clearance")
-    st.caption("Record advance payments or authorize credit terms for MNC corporate accounts.")
+    st.subheader("💳 Module 3: Advance Clearance & Accounts Desk")
+    st.caption(f"Operator: **{user['full_name']}** | Role: `{user.get('account_type')}`")
 
-    jobs = get_jobs_by_stage("PAYMENT")
+    # Fetch jobs pending payment clearance
+    try:
+        res = (
+            supabase.table("jobs")
+            .select("*")
+            .eq("current_stage", "PAYMENT")
+            .order("job_id")
+            .execute()
+        )
+        jobs = res.data or []
+    except Exception as e:
+        st.error(f"Error fetching jobs: {e}")
+        return
+
     if not jobs:
-        st.info("No jobs awaiting payment clearance.")
+        st.info("No jobs pending advance payment clearance.")
         return
 
     for job in jobs:
@@ -19,35 +28,41 @@ def render(user):
         total_val = sum(float(it.get("amount", 0) or 0) for it in items)
 
         with st.container(border=True):
-            c1, c2, c3 = st.columns([2, 2, 1])
+            c1, c2, c3 = st.columns([2.5, 2.5, 2])
             with c1:
-                st.markdown(f"### Job #{job['job_no']} - {job['client_name']}")
-                st.caption(f"Due: `{job['due_date']}`")
-                st.markdown(f"**Total Estimated Commercial: ₹ {total_val:,.2f}**")
+                st.markdown(f"### Job #{job.get('job_no')} - {job.get('client_name')}")
+                st.caption(f"👤 Contact: `{job.get('contact_person') or 'N/A'}` | 📱 `{job.get('contact_phone') or 'N/A'}`")
+                st.caption(f"📅 Due Date: `{job.get('due_date')}` | Booked By: `{job.get('order_taken_by') or 'N/A'}`")
             with c2:
-                st.markdown("**Ordered Items:**")
-                for it in items:
-                    st.write(f"- {it['item_name']} (Qty: {it['quantity']})")
+                st.markdown("##### 📦 Ordered Line Items")
+                for idx, it in enumerate(items, 1):
+                    st.caption(f"**{idx}. {it.get('item_name', 'Item')}** — {it.get('quantity')} {it.get('unit')} @ ₹{float(it.get('rate', 0)):,.2f}")
             with c3:
-                with st.popover("↩️ Return to Design"):
-                    reason = st.text_area("Reason", key=f"ret_pay_{job['job_id']}")
-                    if st.button("Confirm Return", key=f"btn_ret_p_{job['job_id']}", type="primary"):
-                        if reason.strip():
-                            return_job_to_stage(job["job_id"], "DESIGN", reason, user["full_name"])
+                st.metric("Total Order Value", f"₹ {total_val:,.2f}")
+                
+                with st.popover("💵 Record Payment & Clear"):
+                    st.markdown("#### Advance Clearance")
+                    adv_amount = st.number_input(
+                        "Amount Received (₹)", 
+                        min_value=0.0, 
+                        max_value=float(total_val) if total_val > 0 else 1000000.0, 
+                        value=float(total_val), 
+                        key=f"amt_{job['job_id']}"
+                    )
+                    mode = st.selectbox(
+                        "Payment Mode", 
+                        ["Bank Transfer / NEFT / IMPS", "UPI / QR", "Cheque", "Cash"], 
+                        key=f"mode_{job['job_id']}"
+                    )
+                    notes = st.text_input("Transaction Ref / Notes", placeholder="e.g. UTR / Cheque No.", key=f"ref_{job['job_id']}")
+                    
+                    if st.button("Confirm Clearance & Push to Floor", key=f"btn_pay_{job['job_id']}", type="primary", use_container_width=True):
+                        try:
+                            supabase.table("jobs").update({
+                                "current_stage": "PRODUCTION",
+                                "is_returned": False
+                            }).eq("job_id", int(job["job_id"])).execute()
+                            st.success(f"Job #{job.get('job_no')} cleared and pushed to Production floor.")
                             st.rerun()
-
-            st.markdown("---")
-            with st.form(f"pay_form_{job['job_id']}"):
-                col_x, col_y = st.columns(2)
-                with col_x:
-                    clearance_type = st.radio("Clearance Method", ["Advance Received", "Approved Corporate Credit (Portal Billing)"])
-                    advance_amount = st.number_input("Advance Token Amount (₹)", min_value=0.0, value=0.0, step=500.0)
-                with col_y:
-                    payment_ref = st.text_input("Transaction ID / PO Reference Number")
-                    approval_note = st.text_input("Remarks")
-
-                if st.form_submit_button("Release to Production Floor", type="primary", use_container_width=True):
-                    note = f"Mode: {clearance_type} | Adv: ₹{advance_amount} | Ref: {payment_ref} | {approval_note}"
-                    update_job_stage(job["job_id"], "PRODUCTION", user["full_name"], note)
-                    st.success(f"Job #{job['job_no']} released to Production Floor.")
-                    st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to clear payment: {e}")
