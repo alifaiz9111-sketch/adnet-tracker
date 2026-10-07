@@ -297,7 +297,8 @@ def get_user_created_jobs(user_name, is_management=False):
     try:
         query = supabase.table("jobs").select("*").order("job_id", desc=True)
         if not is_management:
-            query = query.eq("order_taken_by", user_name)
+            # Case-insensitive match on creator name
+            query = query.ilike("order_taken_by", f"%{user_name.strip()}%")
         res = query.execute()
         return res.data or []
     except Exception:
