@@ -1,7 +1,6 @@
 import streamlit as st
 import time
 from database import authenticate_user, supabase, log_audit
-import mod_billing_freelance
 from modules import (
     mod_a_sales,
     mod_b_design,
@@ -31,11 +30,11 @@ if "ceo_modal_seen" not in st.session_state:
 
 
 def render_ceo_briefing_dialog(user):
-    """Executive Briefing Modal for Admin & CEO."""
+    """Executive Morning Briefing Modal for Admin & CEO."""
     @st.dialog("👑 Executive Morning Briefing")
     def briefing():
         st.markdown(f"### Welcome back, {user['full_name']}")
-        st.caption("Here is your snapshot of floor velocity and pipeline value:")
+        st.caption("Floor velocity and pipeline snapshot:")
 
         try:
             j_res = supabase.table("jobs").select("*").execute()
@@ -55,8 +54,6 @@ def render_ceo_briefing_dialog(user):
         c3.metric("Live Order Value", f"₹ {val:,.2f}")
 
         st.markdown("---")
-        st.info("⏱️ Click below to proceed to your operations dashboard.")
-
         if st.button("Enter Management Workspace", type="primary", use_container_width=True):
             st.session_state.ceo_modal_seen = True
             st.rerun()
@@ -97,7 +94,7 @@ def main():
     if account_type in ["SUPER_ADMIN", "CEO"] and not st.session_state.ceo_modal_seen:
         render_ceo_briefing_dialog(current_user)
 
-    # Sidebar Navigation & User Info
+    # Sidebar Navigation
     with st.sidebar:
         st.markdown(f"### 👤 {current_user['full_name']}")
         st.caption(f"Role: `{account_type}` | `@{current_user['username']}`")
@@ -109,16 +106,16 @@ def main():
 
         menu_options = {}
 
-        # 1. Executive Desks
+        # Executive Desks
         if account_type in ["SUPER_ADMIN", "CEO"]:
             menu_options["👑 Executive Floor KPI Overview"] = ceo_admin.render_overview
             menu_options["👥 Staff & RBAC Admin"] = ceo_admin.render_user_management
 
-        # 2. Manager Track & Audit
+        # Manager Track & Audit
         if account_type in ["MANAGER", "SUPER_ADMIN", "CEO"]:
             menu_options["🔍 Manager Track & Audit"] = manager_view.render
 
-        # 3. Workstation Modules (RBAC)
+        # Workstation Modules
         if "MOD_A" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
             menu_options["📝 1. Order Intake (Sales)"] = mod_a_sales.render
 
@@ -138,13 +135,7 @@ def main():
             menu_options["🚚 6. Dispatch & Field Delivery"] = mod_f_dispatch.render
 
         if "MOD_G" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
-            menu_options["🧾 7. Billing Review Desk"] = mod_g_billing.render
-
-        # 4. Accounts & Billing Desk (Root module)
-        if ("MOD_BILL" in user_perms or 
-            "VIEW_BILLS" in user_perms or 
-            account_type in ["SUPER_ADMIN", "CEO", "MANAGER", "FREELANCER_CA"]):
-            menu_options["💼 8. Accounts & Invoicing Desk"] = mod_billing_freelance.render
+            menu_options["🧾 7. Billing & Invoicing Desk"] = mod_g_billing.render
 
         if not menu_options:
             st.warning("No active module permissions assigned. Please contact the administrator.")
