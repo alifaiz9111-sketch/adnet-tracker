@@ -4,7 +4,7 @@ from database import authenticate_user, supabase, log_audit
 from modules import (
     mod_a_sales,
     mod_b_design,
-    mod_c_accounts,
+    mod_c_payment,
     mod_d_production,
     mod_e_qc,
     mod_f_dispatch,
@@ -100,7 +100,7 @@ def main():
     # Sidebar Navigation & User Badge
     with st.sidebar:
         st.markdown(f"### 👤 {current_user['full_name']}")
-        st.caption(f"Role: `{account_type}` | `@ {current_user['username']}`")
+        st.caption(f"Role: `{account_type}` | `@{current_user['username']}`")
         if current_user.get("primary_station"):
             st.caption(f"Station: `{current_user['primary_station']}`")
 
@@ -126,7 +126,7 @@ def main():
             menu_options["🎨 2. Design & Proofs"] = mod_b_design.render
 
         if "MOD_C" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
-            menu_options["💳 3. Advance / Accounts Clearance"] = mod_c_accounts.render
+            menu_options["💳 3. Advance / Accounts Clearance"] = mod_c_payment.render
 
         if "MOD_D" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
             menu_options["⚙️ 4. Production Floor"] = mod_d_production.render
@@ -140,7 +140,7 @@ def main():
         if "MOD_G" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
             menu_options["🧾 7. Billing Review Desk"] = mod_g_billing_review.render
 
-        # 4. CA & Accounts Invoicing Desk (with VIEW_BILLS permission support)
+        # 4. CA & Accounts Invoicing Desk (Supports CA role and VIEW_BILLS staff permission)
         if ("MOD_BILL" in user_perms or 
             "VIEW_BILLS" in user_perms or 
             account_type in ["SUPER_ADMIN", "CEO", "MANAGER", "FREELANCER_CA"]):

@@ -342,3 +342,29 @@ def log_audit(user_id, action, details=""):
         return True
     except Exception:
         return False
+
+def get_advance_pending_jobs():
+    """Fetches jobs waiting for advance payment clearance."""
+    try:
+        res = (
+            supabase.table("jobs")
+            .select("*")
+            .eq("current_stage", "PAYMENT")
+            .order("job_id")
+            .execute()
+        )
+        return res.data or []
+    except Exception:
+        return []
+
+def clear_advance_payment(job_id, amount_received, payment_mode, remarks, cleared_by):
+    """Updates job with payment details and advances it to PRODUCTION."""
+    try:
+        data = {
+            "current_stage": "PRODUCTION",
+            "is_returned": False
+        }
+        supabase.table("jobs").update(data).eq("job_id", int(job_id)).execute()
+        return True, "Payment cleared and job dispatched to Production floor."
+    except Exception as e:
+        return False, str(e)
