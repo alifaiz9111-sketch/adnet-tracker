@@ -1,13 +1,10 @@
 import streamlit as st
-import pandas as pd
-from datetime import datetime
 from database import supabase, get_job_items
 
 def render(user):
     st.subheader("📋 Floor Operations & Multi-Filter Job Track")
     st.caption("Live monitoring of all active and past jobs across every stage, assignee/in-charge, and specifications.")
 
-    # 1. Fetch All Jobs from Database
     try:
         res = supabase.table("jobs").select("*").order("job_id", desc=True).execute()
         all_jobs = res.data or []
@@ -19,7 +16,7 @@ def render(user):
         st.info("No jobs found in the system.")
         return
 
-    # 2. Multi-Filter Bar
+    # Multi-Filter Bar
     st.markdown("#### 🔍 Filter Job Directory")
     f_c1, f_c2, f_c3 = st.columns(3)
     with f_c1:
@@ -32,7 +29,6 @@ def render(user):
         f_taken_by = st.text_input("Order Taken By", placeholder="e.g. Rahul").strip().lower()
         f_due_date = st.date_input("Target Delivery Date", value=None)
 
-    # Apply Filters
     filtered_jobs = []
     for j in all_jobs:
         if f_job_no and f_job_no not in str(j.get("job_no", "")).lower():
@@ -52,7 +48,6 @@ def render(user):
     st.markdown(f"**Showing {len(filtered_jobs)} matching job(s):**")
     st.markdown("---")
 
-    # 3. Stage Display Map
     stage_display_map = {
         "SALES": ("📝 Order Intake", "#8B949E"),
         "DESIGN": ("🎨 Design & Proofs", "#58A6FF"),
@@ -65,7 +60,6 @@ def render(user):
         "SETTLED": ("🗄️ Billed & Settled", "#238636")
     }
 
-    # 4. Render Job Cards
     for job in filtered_jobs:
         curr_stage = job.get("current_stage", "UNKNOWN")
         stage_label, stage_color = stage_display_map.get(curr_stage, (curr_stage, "#8B949E"))
@@ -88,7 +82,6 @@ def render(user):
                 if job.get("is_returned"):
                     st.error(f"⚠️ Returned by {job.get('returned_by')}: {job.get('return_reason')}")
 
-            # Job Items and Descriptions
             st.markdown("##### 📦 Ordered Line Items & Job Descriptions")
             if not items:
                 st.caption("No line items logged for this job.")
