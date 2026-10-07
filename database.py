@@ -227,4 +227,203 @@ def reset_invoice_attempts(job_id):
         return False, str(e)
 
 # --- JOB SHEET DELETION ---
-def delete_job_
+def delete_job_sheet(job_id):
+    child_tables = [
+        "job_items", "job_artwork", "job_payments_advance", 
+        "job_production", "job_production_materials", 
+        "job_qc", "job_quality_check", "job_dispatch", 
+        "job_billing_review", "audit_logs"
+    ]
+    for table_name in child_tables:
+        try:
+            supabase.table(table_name).delete().eq("job_id", job_id).execute()
+        except Exception:
+            pass
+
+    try:
+        supabase.table("jobs").delete().eq("job_id", job_id).execute()
+        return True, "Job sheet and all associated records deleted successfully."
+    except Exception as e:
+        return False, str(e)
+
+# --- USER LOGIN TRACKING & NOTIFICATION METRICS ---
+def update_user_last_login(user_id):
+    """Updates user last login timestamp to now."""
+    now_iso = datetime.now(IST).isoformat()
+    try:
+        supabase.table("users").update({"last_login": now_iso}).eq("user_id", user_id).execute()
+    except Exception:
+        pass
+
+def get_user_login_summary(user):
+    """Calculates login banner metrics based on user role and last login."""
+    user_id = user.get("user_id")
+    account_type = user.get("account_type", "STAFF")
+    user_perms = user.get("permissions", [])
+    last_login = user.get("last_login")
+
+    summary = {
+        "new_jobs_count": 0,
+        "new_jobs_total_val": 0.0,
+        "pending_stage_name": None,
+        "pending_stage_count": 0
+    }
+
+    try:
+        if account_type in ["CEO", "SUPER_ADMIN"]:
+            query = supabase.table("jobs").select("job_id")
+            if last_login:
+                query = query.gt("created_at", last_login)
+            jobs_res = query.execute()
+            new_job_ids = [j["job_id"] for j in (jobs_res.data or [])]
+            summary["new_jobs_count"] = len(new_job_ids)
+
+            if new_job_ids:
+                items_res = supabase.table("job_items").select("amount").in_("job_id", new_job_ids).execute()
+                summary["new_jobs_total_val"] = sum(float(it.get("amount", 0) or 0) for it in (items_res.data or []))
+        else:
+            stage_map = {
+                "MOD_A": ("Order Intake", "DESIGN"),
+                "MOD_B": ("Design & Proofs", "DESIGN"),
+                "MOD_C": ("Advance & Accounts", "PAYMENT"),
+                "MOD_D": ("Production Floor", "PRODUCTION"),
+                "MOD_E": ("Quality Control", "QC"),
+                "MOD_F": ("Dispatch & Delivery", "DISPATCH"),
+                "MOD_G": ("Billing Review", "BILLING_REVIEW"),
+                "MOD_BILL": ("GST Invoicing Queue", "BILLING_QUEUE")
+            }
+            for mod_code, (stage_label, stage_key) in stage_map.items():
+                if mod_code in user_perms:
+                    summary["pending_stage_name"] = stage_label
+                    summary["pending_stage_count"] = get_stage_job_count(stage_key)
+                    break
+    except Exception:
+        pass
+
+    return summary
+
+# =====================================================================
+# DYNAMIC MASTERS, MULTI-STEP PRODUCTION & PIPELINE MONITOR HELPERS
+# =====================================================================
+
+def get_dynamic_dropdown_options(table_name: str, column_name: str):
+    """Fetch distinct active items for dynamic dropdown lists."""
+    try:
+        res = supabase.table(table_name).select(column_name).execute()
+        return [row[column_name] for row in (res.data or []) if row.get(column_name)]
+    except Exception:
+        return []
+
+def add_dynamic_option(table_name: str, column_name: str, value: str):
+    """Insert a new option into dynamic master tables."""
+    try:
+        supabase.table(table_name).insert({column_name: value.strip()}).execute()
+        return True
+    except Exception:
+        return False
+
+def get_production_jobs():
+    """Fetch all active jobs currently sitting in PRODUCTION stage."""
+    try:
+        res = supabase.table("jobs").select(
+            "job_id, job_no, client_name, current_stage, created_by, order_taken_by, last_dispatched_by, is_returned, return_reason"
+        ).eq("current_stage", "PRODUCTION").order("created_at", desc=False).execute()
+        return res.data or []
+    except Exception:
+        return []
+
+def complete_production_step(job_id, machine, operator, media, vendor, v_job, v_h, v_w, fab, fab_h, fab_w, completed_by):
+    """Save 3 micro-steps and route job to QC."""
+    now_iso = datetime.now(IST).isoformat()
+    try:
+        prod_data = {
+            "job_id": job_id,
+            "machine_allocated": machine,
+            "operator_name": operator,
+            "media_used": media,
+            "vendor_job_type": v_job if v_job != "None" else None,
+            "vendor_size_height": v_h,
+            "vendor_size_width": v_w,
+            "fabrication_type": fab if fab != "None" else None,
+            "fabrication_size_height": fab_h,
+            "fabrication_size_width": fab_w,
+            "completed_by": completed_by,
+            "completed_at": now_iso
+        }
+        supabase.table("job_production").upsert(prod_data, on_conflict="job_id").execute()
+
+        supabase.table("jobs").update({
+            "current_stage": "QC",
+            "holding_employee_role": "QC_INSPECTOR",
+            "last_dispatched_by": completed_by,
+            "is_returned": False,
+            "return_reason": None
+        }).eq("job_id", job_id).execute()
+        return True
+    except Exception:
+        return False
+
+def return_job_to_prev_desk(job_id, target_user, reason, step):
+    """Return job to previous desk and flag reason."""
+    try:
+        full_reason = f"[{step}] Returned: {reason.strip()}"
+        supabase.table("jobs").update({
+            "current_stage": "PAYMENT",
+            "holding_employee_role": "ADVANCE_ACCOUNTS",
+            "is_returned": True,
+            "return_reason": full_reason,
+            "current_desk_manager": target_user
+        }).eq("job_id", job_id).execute()
+        return True
+    except Exception:
+        return False
+
+def upload_pod_image(job_id, uploaded_file):
+    """Upload proof of delivery image to Supabase Storage bucket."""
+    try:
+        ext = uploaded_file.name.split(".")[-1]
+        file_path = f"pod_job_{job_id}_{int(datetime.now().timestamp())}.{ext}"
+        file_bytes = uploaded_file.getvalue()
+        
+        supabase.storage.from_("pod_receipts").upload(
+            path=file_path,
+            file=file_bytes,
+            file_options={"content-type": uploaded_file.type}
+        )
+        return supabase.storage.from_("pod_receipts").get_public_url(file_path)
+    except Exception:
+        return None
+
+def complete_dispatch_step(job_id, challan_no, pod_url, dispatched_by):
+    """Record dispatch details with POD and forward to billing review."""
+    now_iso = datetime.now(IST).isoformat()
+    try:
+        supabase.table("job_dispatch").insert({
+            "job_id": job_id,
+            "challan_no": challan_no,
+            "pod_image_url": pod_url,
+            "dispatched_by": dispatched_by,
+            "dispatched_at": now_iso
+        }).execute()
+
+        supabase.table("jobs").update({
+            "current_stage": "BILLING_REVIEW",
+            "holding_employee_role": "BILLING_EXECUTIVE",
+            "last_dispatched_by": dispatched_by
+        }).eq("job_id", job_id).execute()
+        return True
+    except Exception:
+        return False
+
+def get_all_jobs_pipeline(user_filter=None):
+    """Fetch pipeline overview jobs with optional user scoping."""
+    try:
+        query = supabase.table("jobs").select(
+            "job_id, job_no, client_name, current_stage, created_at, created_by, order_taken_by, current_desk_manager, is_returned, return_reason, invoice_file_url"
+        )
+        if user_filter:
+            query = query.or_(f"created_by.eq.{user_filter},order_taken_by.eq.{user_filter}")
+        res = query.order("created_at", desc=True).execute()
+        return res.data or []
+    except Exception:
+        return []

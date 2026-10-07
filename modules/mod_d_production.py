@@ -1,81 +1,183 @@
 import streamlit as st
-from database import supabase, get_jobs_for_stage, update_job_stage, return_job_to_previous_stage
-from datetime import datetime
+from database import (
+    get_production_jobs,
+    complete_production_step,
+    return_job_to_prev_desk,
+    get_dynamic_dropdown_options,
+    add_dynamic_option
+)
 
 def render(user):
-    st.title("⚙️ 4. Production Floor Execution")
-    st.caption("Assign machines, log start/end timestamps, and track material consumption & scrap.")
+    st.title("⚙️ Workstation 4: Production Floor")
+    st.caption("Active job execution across in-house printing, outsourced job-work vendors, and paper fabrication.")
 
-    jobs = get_jobs_for_stage("PRODUCTION", is_financial_role=False)
+    jobs = get_production_jobs()
+
     if not jobs:
-        st.info("No active jobs pending production.")
+        st.info("No job sheets currently waiting on the production floor.")
         return
 
-    for j in jobs:
-        job_id = j["job_id"]
-        job_no = j["job_no"]
-
+    for job in jobs:
         with st.container(border=True):
-            if j.get("is_returned"):
-                st.error(f"⚠️ **Rework Requested:** {j.get('return_reason')} (Returned by: {j.get('returned_by')})")
+            col_hdr1, col_hdr2 = st.columns([3, 1])
+            with col_hdr1:
+                st.subheader(f"Job #{job['job_no']} — {job['client_name']}")
+                origin_user = job.get("last_dispatched_by") or job.get("order_taken_by") or "Sales/Accounts"
+                st.caption(f"Dispatched by / Origin Desk: `{origin_user}`")
+            with col_hdr2:
+                if job.get("is_returned"):
+                    st.error(f"⚠️ Flagged Return:\n{job.get('return_reason')}")
 
-            st.markdown(f"### Job #{job_no} - {j['client_name']}")
-            st.write(f"**Due Date:** `{j['due_date']}` | **Priority:** `{j['priority']}`")
+            # =================================================================
+            # MICRO-STEP 1: In-House Floor Execution
+            # =================================================================
+            st.markdown("#### 1️⃣ Micro-Step 1: In-House Printing & Floor Allocation")
+            
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                machine = st.selectbox(
+                    "Machine Allocated*",
+                    ["Solvent Alpha", "Eco-Solvent 1", "UV Flatbed", "Plotter / Cutter", "Offset Sheetfed", "Manual Handcraft"],
+                    key=f"mach_{job['job_id']}"
+                )
+            with c2:
+                operator = st.text_input("Machine Operator Name*", placeholder="e.g. Ramesh Kumar", key=f"op_{job['job_id']}")
+            with c3:
+                media_used = st.text_input("Roll / Substrate Type*", placeholder="e.g. 280 GSM Star Flex, Cast Vinyl", key=f"med_{job['job_id']}")
 
-            st.markdown("##### Specifications to Print:")
-            for item in j["items"]:
-                st.write(f"- Item {item['item_no']}: **{item['description_spec']}** | Material: {item['material']} | Qty: {item['qty']}")
+            with st.popover("↩️ Return to Previous Desk (Step 1)"):
+                reason_1 = st.text_area("Reason for Return*", placeholder="e.g., File format incompatible, missing substrate specs", key=f"r1_{job['job_id']}")
+                if st.button("Confirm Return", key=f"btn_r1_{job['job_id']}", type="primary"):
+                    if reason_1.strip():
+                        return_job_to_prev_desk(job['job_id'], target_user=origin_user, reason=reason_1, step="Micro-Step 1")
+                        st.warning("Job sheet returned to previous desk.")
+                        st.rerun()
+                    st.error("Please enter a valid reason.")
 
-            with st.form(f"prod_form_{job_id}"):
-                c1, c2 = st.columns(2)
-                machine = c1.selectbox("Machine / Section", ["Solvent 1", "Solvent 2", "Eco-Solvent", "Flatbed UV", "Fabric Printer", "Lamination / Fabrication"], key=f"mach_{job_id}")
-                operator = c2.text_input("Operator Assigned", value=user["full_name"], key=f"op_{job_id}")
+            st.markdown("---")
 
-                st.markdown("##### Material Consumption:")
-                m1, m2, m3 = st.columns(3)
-                mat_name = m1.text_input("Material Name / Roll Spec", key=f"mname_{job_id}")
-                qty_issued = m2.number_input("Qty / Sq Ft Issued", min_value=0.0, step=1.0, key=f"qiss_{job_id}")
-                qty_used = m3.number_input("Qty / Sq Ft Actually Used", min_value=0.0, step=1.0, key=f"quse_{job_id}")
+            # =================================================================
+            # MICRO-STEP 2: Outsourced Vendor Execution (With Inline Add New)
+            # =================================================================
+            st.markdown("#### 2️⃣ Micro-Step 2: Outsourced Vendor Work (Optional)")
+            
+            vendors_list = get_dynamic_dropdown_options("vendors", "vendor_name")
+            job_types_list = get_dynamic_dropdown_options("vendor_job_types", "job_type")
 
-                submit = st.form_submit_button("✅ Complete Production & Send to QC", type="primary")
+            # Vendor Selection & Inline Add
+            col_v1, col_v2 = st.columns([2, 1])
+            with col_v1:
+                sel_vendor = st.selectbox(
+                    "Select Vendor",
+                    ["None"] + vendors_list,
+                    key=f"v_sel_{job['job_id']}"
+                )
+            with col_v2:
+                with st.popover("➕ Add New Vendor"):
+                    new_v = st.text_input("Vendor Company Name", key=f"new_v_in_{job['job_id']}")
+                    if st.button("Save Vendor", key=f"btn_v_save_{job['job_id']}", type="primary"):
+                        if new_v.strip():
+                            add_dynamic_option("vendors", "vendor_name", new_v.strip())
+                            st.rerun()
+                        st.error("Enter a name.")
 
-                if submit:
-                    now = datetime.now().isoformat()
-                    try:
-                        supabase.table("job_production").update({
-                            "assigned_to": operator,
-                            "machine_section": machine,
-                            "start_time": now,
-                            "end_time": now,
-                            "is_production_done": True
-                        }).eq("job_id", job_id).execute()
-                    except Exception:
-                        pass
+            # Job Type Selection & Inline Add
+            col_j1, col_j2 = st.columns([2, 1])
+            with col_j1:
+                sel_job = st.selectbox(
+                    "Select Job Type",
+                    ["None"] + job_types_list,
+                    key=f"j_sel_{job['job_id']}"
+                )
+            with col_j2:
+                with st.popover("➕ Add New Job Type"):
+                    new_j = st.text_input("Job Type / Task", placeholder="e.g. Acrylic Laser Cutting, Neon Sign", key=f"new_j_in_{job['job_id']}")
+                    if st.button("Save Job Type", key=f"btn_j_save_{job['job_id']}", type="primary"):
+                        if new_j.strip():
+                            add_dynamic_option("vendor_job_types", "job_type", new_j.strip())
+                            st.rerun()
+                        st.error("Enter a job type.")
 
-                    if mat_name and qty_issued > 0:
-                        try:
-                            supabase.table("job_production_materials").insert({
-                                "job_id": job_id,
-                                "row_no": 1,
-                                "material_item": mat_name,
-                                "qty_issued": qty_issued,
-                                "issued_by": user["full_name"],
-                                "qty_used": qty_used,
-                                "sign": operator
-                            }).execute()
-                        except Exception:
-                            pass
+            col_vh, col_vw = st.columns(2)
+            with col_vh:
+                v_height = st.text_input("Vendor Job Height", placeholder="e.g. 10 ft / 120 in", key=f"vh_{job['job_id']}")
+            with col_vw:
+                v_width = st.text_input("Vendor Job Width", placeholder="e.g. 4 ft / 48 in", key=f"vw_{job['job_id']}")
 
-                    update_job_stage(job_id, "QC", "Employee E (Quality Check)")
-                    st.toast(f"Job #{job_no} sent to QC!", icon="🚀")
-                    st.rerun()
+            with st.popover("↩️ Return to Previous Desk (Step 2)"):
+                reason_2 = st.text_area("Reason for Return*", placeholder="e.g., Vendor capacity full, rate mismatch", key=f"r2_{job['job_id']}")
+                if st.button("Confirm Return", key=f"btn_r2_{job['job_id']}", type="primary"):
+                    if reason_2.strip():
+                        return_job_to_prev_desk(job['job_id'], target_user=origin_user, reason=reason_2, step="Micro-Step 2")
+                        st.warning("Job sheet returned to previous desk.")
+                        st.rerun()
+                    st.error("Please enter a valid reason.")
 
-            with st.popover("↩️ Return to Previous Desk"):
-                return_reason = st.text_input("Reason for return (required)", key=f"reason_{job_id}")
-                if st.button("Confirm Return to Accounts/Design", key=f"return_btn_{job_id}"):
-                    if return_reason.strip():
-                        return_job_to_previous_stage(job_id, "PAYMENT", "Employee C (Accounts)", return_reason, user["full_name"])
-                        st.toast(f"Job #{job_no} returned to Accounts", icon="↩️")
+            st.markdown("---")
+
+            # =================================================================
+            # MICRO-STEP 3: Paper Fabrication & Finishing (With Inline Add New)
+            # =================================================================
+            st.markdown("#### 3️⃣ Micro-Step 3: Paper Fabrication & Finishing (Optional)")
+            
+            fab_list = get_dynamic_dropdown_options("paper_fabrications", "fabrication_name")
+
+            col_f1, col_f2 = st.columns([2, 1])
+            with col_f1:
+                sel_fab = st.selectbox(
+                    "Select Paper Fabrication",
+                    ["None"] + fab_list,
+                    key=f"fab_sel_{job['job_id']}"
+                )
+            with col_f2:
+                with st.popover("➕ Add Fabrication"):
+                    new_f = st.text_input("Finishing / Fabrication Type", placeholder="e.g. Thermal Gloss Lamination, Eyeleting", key=f"new_f_in_{job['job_id']}")
+                    if st.button("Save Fabrication", key=f"btn_f_save_{job['job_id']}", type="primary"):
+                        if new_f.strip():
+                            add_dynamic_option("paper_fabrications", "fabrication_name", new_f.strip())
+                            st.rerun()
+                        st.error("Enter a fabrication type.")
+
+            col_fh, col_fw = st.columns(2)
+            with col_fh:
+                fab_height = st.text_input("Fabrication Height", placeholder="e.g. 3 ft / 36 in", key=f"fh_{job['job_id']}")
+            with col_fw:
+                fab_width = st.text_input("Fabrication Width", placeholder="e.g. 2 ft / 24 in", key=f"fw_{job['job_id']}")
+
+            with st.popover("↩️ Return to Previous Desk (Step 3)"):
+                reason_3 = st.text_area("Reason for Return*", placeholder="e.g., Missing finishing specifications", key=f"r3_{job['job_id']}")
+                if st.button("Confirm Return", key=f"btn_r3_{job['job_id']}", type="primary"):
+                    if reason_3.strip():
+                        return_job_to_prev_desk(job['job_id'], target_user=origin_user, reason=reason_3, step="Micro-Step 3")
+                        st.warning("Job sheet returned to previous desk.")
+                        st.rerun()
+                    st.error("Please enter a valid reason.")
+
+            st.markdown("---")
+
+            # =================================================================
+            # Bottom Completion Button with Strict Data Gates
+            # =================================================================
+            if st.button("✅ Complete Production Floor", key=f"btn_comp_{job['job_id']}", type="primary", use_container_width=True):
+                if not operator.strip() or not media_used.strip():
+                    st.error("Step 1 Machine Operator and Roll/Substrate fields are mandatory before moving to Quality Control.")
+                else:
+                    success = complete_production_step(
+                        job_id=job['job_id'],
+                        machine=machine,
+                        operator=operator.strip(),
+                        media=media_used.strip(),
+                        vendor=sel_vendor,
+                        v_job=sel_job,
+                        v_h=v_height.strip(),
+                        v_w=v_width.strip(),
+                        fab=sel_fab,
+                        fab_h=fab_height.strip(),
+                        fab_w=fab_width.strip(),
+                        completed_by=user['username']
+                    )
+                    if success:
+                        st.success(f"Job #{job['job_no']} successfully routed to Quality Check (QC).")
                         st.rerun()
                     else:
-                        st.warning("Please enter a reason.")
+                        st.error("Failed to complete production step. Check database logs.")

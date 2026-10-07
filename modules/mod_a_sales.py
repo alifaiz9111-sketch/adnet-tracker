@@ -1,117 +1,148 @@
 import streamlit as st
-from database import supabase, update_job_stage, get_next_job_no
-from email_service import notify_ceo_new_job
-from datetime import date
+from datetime import datetime
+import pytz
+from database import (
+    supabase,
+    get_next_job_no,
+    get_stage_job_count
+)
+
+IST = pytz.timezone('Asia/Kolkata')
 
 def render(user):
-    st.title("📝 1. Order Intake & Client Specification")
-    st.caption("Fill all details to create a new Job Sheet card.")
+    st.title("📝 Workstation 1: Order Intake & Sales")
+    st.caption("Create verified job sheets, attach specifications, and track incoming client requests.")
 
-    # Auto-calculate next sequential Job No.
-    suggested_job_no = get_next_job_no()
+    account_type = user.get("account_type", "STAFF")
+    user_perms = user.get("permissions", [])
+    
+    # Manager check: Super Admin, CEO, or employees with explicit view-all permissions
+    is_sales_mgr = account_type in ["SUPER_ADMIN", "CEO"] or "VIEW_ALL_JOBS" in user_perms or "MOD_A_MGR" in user_perms
 
-    with st.form("new_job_form", clear_on_submit=True):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            job_no = st.text_input("Job No. *", value=suggested_job_no)
-            client_name = st.text_input("Client Name *", placeholder="e.g. RTIICS Hospital")
-            contact_phone = st.text_input("Contact / Phone", placeholder="98XXXXXXXX")
-        with col2:
-            date_received = st.date_input("Date Received", value=date.today())
-            due_date = st.date_input("Due Date *")
-            priority = st.selectbox("Priority", ["Normal", "Urgent", "Low"])
-        with col3:
-            po_order_ref = st.text_input("PO / Order Ref.", placeholder="e.g. PO-889")
-            gst_no = st.text_input("GST No.", placeholder="19AAAAA0000A1Z5")
-            # Point 1: Order Taken By is locked to logged-in user name
-            order_taken_by = st.text_input("Order Taken By", value=user["full_name"], disabled=True)
+    tab_create, tab_view = st.tabs(["➕ Create New Job Sheet", "📋 Active Sales Orders"])
 
-        main_delivery_address = st.text_area("Main Delivery Address *", placeholder="Enter primary delivery address...")
+    # =========================================================================
+    # TAB 1: CREATE NEW JOB SHEET (WITH STRICT DATA GATES)
+    # =========================================================================
+    with tab_create:
+        next_no = get_next_job_no()
+        st.subheader(f"New Order Entry (Job #{next_no})")
 
-        st.markdown("#### 📦 Job Specifications & Commercials")
-        st.caption("Enter specifications for up to 3 items below:")
+        with st.form("new_job_form", clear_on_submit=True):
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                client_name = st.text_input("Client / Company Name*").strip()
+                contact_person = st.text_input("Contact Person Name").strip()
+                contact_phone = st.text_input("Contact Phone Number*").strip()
+            with col_c2:
+                payment_terms = st.selectbox("Payment Terms*", ["Full Advance", "50% Token Advance", "MNC Credit 30 Days", "MNC Credit 60 Days"])
+                due_date = st.date_input("Delivery Due Date*", min_value=datetime.now(IST).date())
+                delivery_mode = st.selectbox("Delivery Type*", ["Self Pickup", "Direct Hand Delivery", "Third-Party Logistics / Courier"])
 
-        items = []
-        for i in range(1, 4):
-            with st.expander(f"Item #{i}", expanded=(i == 1)):
-                c1, c2, c3, c4 = st.columns([3, 2, 1, 1])
-                desc = c1.text_input(f"Description / Size / Spec #{i}", key=f"desc_{i}")
-                mat = c2.text_input(f"Material #{i}", key=f"mat_{i}")
-                qty = c3.number_input(f"Qty #{i}", min_value=0.0, step=1.0, key=f"qty_{i}")
-                rate = c4.number_input(f"Rate (Rs) #{i}", min_value=0.0, step=1.0, key=f"rate_{i}")
-                
-                # Point 2: Individual item delivery address with default value
-                col_rem, col_addr = st.columns([1, 1])
-                rem = col_rem.text_input(f"Remarks #{i}", key=f"rem_{i}")
-                item_address = col_addr.text_input(
-                    f"Delivery Address #{i}", 
-                    value="Same As The Main Address", 
-                    key=f"item_addr_{i}"
-                )
+            st.markdown("---")
+            st.markdown("#### 📦 Job Line Items & Specifications")
+            col_i1, col_i2 = st.columns([2, 1])
+            with col_i1:
+                item_desc = st.text_area("Item Description / Specifications*", placeholder="e.g. Star Flex Frontlit Banner with wooden frame").strip()
+                media_substrate = st.text_input("Material / Substrate*", placeholder="e.g. 340 GSM Star Flex / Vinyl on 3mm Foam Sheet").strip()
+            with col_i2:
+                item_qty = st.number_input("Quantity*", min_value=1, value=1, step=1)
+                item_rate = st.number_input("Unit Rate (₹)*", min_value=0.0, value=0.0, step=10.0)
+                item_total = item_qty * item_rate
+                st.metric("Total Line Amount (₹)", f"₹ {item_total:,.2f}")
 
-                if desc and qty > 0:
-                    items.append({
-                        "item_no": i,
-                        "description_spec": desc,
-                        "material": mat,
-                        "qty": qty,
-                        "rate": rate,
-                        "amount": qty * rate,
-                        "remarks": rem,
-                        "delivery_address": item_address if item_address.strip() else "Same As The Main Address"
-                    })
+            delivery_address = st.text_input("Delivery Address / Destination", placeholder="Leave blank if Self Pickup").strip()
+            special_notes = st.text_area("Production / Finishing Remarks", placeholder="e.g. Center seam, eyelets every 2 feet").strip()
 
-        total_amount = sum(item["amount"] for item in items)
-        st.markdown(f"### **Total Amount: ₹ {total_amount:,.2f}**")
+            submit = st.form_submit_button("🚀 Submit Job Sheet to Design", type="primary", use_container_width=True)
 
-        submit = st.form_submit_button("✅ Create Job Sheet & Notify CEO", type="primary")
+            if submit:
+                # STRICT VALIDATION GATES (Requirement 5)
+                if not client_name:
+                    st.error("Client / Company Name is strictly required.")
+                elif not contact_phone:
+                    st.error("Contact Phone Number is mandatory.")
+                elif not item_desc:
+                    st.error("Item Description / Specifications cannot be empty.")
+                elif not media_substrate:
+                    st.error("Material / Substrate specification is required for the floor.")
+                elif item_rate <= 0:
+                    st.error("Unit Rate must be greater than ₹ 0.00.")
+                else:
+                    now_iso = datetime.now(IST).isoformat()
+                    try:
+                        # 1. Insert into jobs table
+                        job_payload = {
+                            "job_no": next_no,
+                            "client_name": client_name,
+                            "contact_person": contact_person,
+                            "contact_phone": contact_phone,
+                            "payment_terms": payment_terms,
+                            "due_date": str(due_date),
+                            "delivery_mode": delivery_mode,
+                            "current_stage": "DESIGN",
+                            "holding_employee_role": "GRAPHIC_DESIGNER",
+                            "order_taken_by": user["username"],
+                            "created_by": user["username"],
+                            "created_at": now_iso,
+                            "last_dispatched_by": user["username"],
+                            "is_billed": False
+                        }
+                        job_res = supabase.table("jobs").insert(job_payload).execute()
 
-    if submit:
-        if not job_no or not client_name or not due_date or not items:
-            st.error("Please fill in Job No, Client Name, Due Date, and at least 1 valid item.")
-            return
+                        if job_res.data:
+                            created_job_id = job_res.data[0]["job_id"]
 
-        job_data = {
-            "job_no": job_no,
-            "date_received": str(date_received),
-            "due_date": str(due_date),
-            "priority": priority,
-            "client_name": client_name,
-            "contact_phone": contact_phone,
-            "po_order_ref": po_order_ref,
-            "gst_no": gst_no,
-            "order_taken_by": user["full_name"], # Locked to logged-in user
-            "delivery_address": main_delivery_address,
-            "current_stage": "DESIGN",
-            "holding_employee_role": "Employee B (Design)",
-            "created_by": user["user_id"]
-        }
+                            # 2. Insert line item
+                            item_payload = {
+                                "job_id": created_job_id,
+                                "item_no": 1,
+                                "description_spec": item_desc,
+                                "material": media_substrate,
+                                "qty": int(item_qty),
+                                "unit_rate": float(item_rate),
+                                "amount": float(item_total),
+                                "delivery_address": delivery_address if delivery_address else "Self Pickup",
+                                "remarks": special_notes
+                            }
+                            supabase.table("job_items").insert(item_payload).execute()
 
-        try:
-            res = supabase.table("jobs").insert(job_data).execute()
-            created_job_id = res.data[0]["job_id"]
+                            st.success(f"Job #{next_no} successfully generated and routed to Design Desk!")
+                            st.rerun()
+                        else:
+                            st.error("Could not register job sheet. Please retry.")
+                    except Exception as e:
+                        st.error(f"Error creating job sheet: {str(e)}")
 
-            for it in items:
-                it_record = it.copy()
-                it_record["job_id"] = created_job_id
-                supabase.table("job_items").insert(it_record).execute()
+    # =========================================================================
+    # TAB 2: ACTIVE SALES ORDERS (SCOPED VISIBILITY - Requirement 4)
+    # =========================================================================
+    with tab_view:
+        if is_sales_mgr:
+            st.info("👔 **Manager View:** Showing all sales jobs created across all employees.")
+            jobs_query = supabase.table("jobs").select("*").order("created_at", desc=True)
+        else:
+            st.info(f"👤 **Staff View:** Showing sales jobs created by you (`@{user['username']}`).")
+            jobs_query = supabase.table("jobs").select("*").eq("order_taken_by", user["username"]).order("created_at", desc=True)
 
-            # Initialize stage records
-            supabase.table("job_artwork").insert({"job_id": created_job_id}).execute()
-            supabase.table("job_payments_advance").insert({"job_id": created_job_id, "balance_amount": total_amount}).execute()
+        res = jobs_query.execute()
+        sales_jobs = res.data or []
 
-            # Point 3: Notify CEO with full items list & commercials
-            notify_ceo_new_job(
-                job_no=job_no,
-                client_name=client_name,
-                total_val=total_amount,
-                order_taker=user["full_name"],
-                due_date=str(due_date),
-                items=items,
-                main_delivery_address=main_delivery_address
-            )
-
-            st.success(f"Job #{job_no} successfully created! Dispatched to Design Queue.")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error creating job: {e}")
+        if not sales_jobs:
+            st.info("No active sales orders found.")
+        else:
+            for sj in sales_jobs:
+                with st.container(border=True):
+                    c_left, c_right = st.columns([3, 1])
+                    with c_left:
+                        st.subheader(f"Job #{sj.get('job_no')} — {sj.get('client_name')}")
+                        st.caption(f"Created: `{sj.get('created_at')[:10]}` | Rep: `@{sj.get('order_taken_by')}` | Phone: `{sj.get('contact_phone', 'N/A')}`")
+                        st.write(f"**Terms:** {sj.get('payment_terms')} | **Target Date:** {sj.get('due_date')}")
+                    with c_right:
+                        curr_stage = sj.get("current_stage", "UNKNOWN")
+                        if curr_stage == "SETTLED":
+                            st.success("✅ **SETTLED**")
+                        else:
+                            st.warning(f"📍 Desk: **{curr_stage}**")
+                        if sj.get("is_returned"):
+                            st.error(f"⚠️ Return Note: {sj.get('return_reason')}")
