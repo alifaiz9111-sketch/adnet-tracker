@@ -8,7 +8,7 @@ from modules import (
     mod_d_production,
     mod_e_qc,
     mod_f_dispatch,
-    mod_g_billing_review,
+    mod_g_billing,
     mod_billing_freelance,
     manager_view,
     ceo_admin
@@ -138,7 +138,7 @@ def main():
             menu_options["🚚 6. Dispatch & Field Delivery"] = mod_f_dispatch.render
 
         if "MOD_G" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
-            menu_options["🧾 7. Billing Review Desk"] = mod_g_billing_review.render
+            menu_options["🧾 7. Billing Review Desk"] = mod_g_billing.render
 
         # 4. CA & Accounts Invoicing Desk (Supports CA role and VIEW_BILLS staff permission)
         if ("MOD_BILL" in user_perms or 
