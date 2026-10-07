@@ -368,3 +368,29 @@ def clear_advance_payment(job_id, amount_received, payment_mode, remarks, cleare
         return True, "Payment cleared and job dispatched to Production floor."
     except Exception as e:
         return False, str(e)
+
+def authorize_gst_billing(job_id, authorized_by):
+    """Pushes a GST job to CA Desk (BILLING_QUEUE)."""
+    try:
+        data = {
+            "current_stage": "BILLING_QUEUE",
+            "billing_type": "GST",
+            "is_billed": False
+        }
+        supabase.table("jobs").update(data).eq("job_id", int(job_id)).execute()
+        return True, "Job successfully authorized and pushed to CA Invoicing Queue."
+    except Exception as e:
+        return False, str(e)
+
+def complete_nongst_billing(job_id, settled_by):
+    """Marks a Non-GST job directly completed/settled without CA invoicing."""
+    try:
+        data = {
+            "current_stage": "SETTLED",
+            "billing_type": "NON_GST",
+            "is_billed": True
+        }
+        supabase.table("jobs").update(data).eq("job_id", int(job_id)).execute()
+        return True, "Job marked completed as Non-GST and settled successfully."
+    except Exception as e:
+        return False, str(e)
