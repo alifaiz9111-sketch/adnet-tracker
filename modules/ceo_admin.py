@@ -5,6 +5,7 @@ from database import (
     create_user, 
     update_user_status, 
     delete_user,
+    update_user_permissions,
     extend_job_deadline, 
     delete_job_sheet,
     get_all_vendors,
@@ -116,11 +117,79 @@ def render_user_management(user):
                             status_label = "🟢 Active" if is_active else "🔴 Inactive"
                             st.markdown(f"**Status:** {status_label}")
                             
+                            # 1. EDIT ROLES & WORKSTATIONS POPOVER
+                            with st.popover("✏️ Edit Staff & Roles"):
+                                st.markdown(f"#### Edit: {u['full_name']} (`@{u['username']}`)")
+                                
+                                edit_name = st.text_input("Full Name", value=u.get("full_name", ""), key=f"ed_name_{u['user_id']}")
+                                edit_phone = st.text_input("Mobile / Phone", value=u.get("phone") or "", key=f"ed_ph_{u['user_id']}")
+                                edit_email = st.text_input("Email", value=u.get("email") or "", key=f"ed_em_{u['user_id']}")
+                                edit_station = st.text_input("Primary Station", value=u.get("primary_station") or "", key=f"ed_stn_{u['user_id']}")
+                                edit_can_vendor = st.checkbox("Can Manage Vendors?", value=bool(u.get("can_manage_vendors", False)), key=f"ed_vnd_{u['user_id']}")
+                                
+                                st.markdown("##### Assigned Workstations (Checklist)")
+                                cur_perms = u.get("permissions") or []
+                                
+                                e_col1, e_col2 = st.columns(2)
+                                with e_col1:
+                                    ed_mod_a = st.checkbox("📝 Sales (Mod 1)", value=("MOD_A" in cur_perms), key=f"ed_ma_{u['user_id']}")
+                                    ed_mod_b = st.checkbox("🎨 Design (Mod 2)", value=("MOD_B" in cur_perms), key=f"ed_mb_{u['user_id']}")
+                                    ed_mod_c = st.checkbox("💳 Accounts / Advance (Mod 3)", value=("MOD_C" in cur_perms), key=f"ed_mc_{u['user_id']}")
+                                    ed_mod_d = st.checkbox("⚙️ Production (Mod 4)", value=("MOD_D" in cur_perms), key=f"ed_md_{u['user_id']}")
+                                with e_col2:
+                                    ed_mod_e = st.checkbox("🔍 QC (Mod 5)", value=("MOD_E" in cur_perms), key=f"ed_me_{u['user_id']}")
+                                    ed_mod_f = st.checkbox("🚚 Dispatch (Mod 6)", value=("MOD_F" in cur_perms), key=f"ed_mf_{u['user_id']}")
+                                    ed_mod_g = st.checkbox("🧾 Billing Review (Mod 7)", value=("MOD_G" in cur_perms), key=f"ed_mg_{u['user_id']}")
+                                    ed_mod_bill = st.checkbox("💼 CA Desk (Mod 8)", value=("MOD_BILL" in cur_perms), key=f"ed_mbill_{u['user_id']}")
+                                
+                                st.markdown("---")
+                                cur_acc_type = u.get("account_type", "STAFF")
+                                ed_is_manager = st.checkbox("👔 Floor Manager Role", value=(cur_acc_type == "MANAGER"), key=f"ed_mgr_{u['user_id']}")
+                                ed_is_admin = st.checkbox("👑 Executive Access", value=(cur_acc_type in ["CEO", "SUPER_ADMIN"]), key=f"ed_adm_{u['user_id']}")
+                                
+                                if st.button("Save Changes", key=f"btn_save_u_{u['user_id']}", type="primary", use_container_width=True):
+                                    new_perms = []
+                                    if ed_mod_a: new_perms.append("MOD_A")
+                                    if ed_mod_b: new_perms.append("MOD_B")
+                                    if ed_mod_c: new_perms.append("MOD_C")
+                                    if ed_mod_d: new_perms.append("MOD_D")
+                                    if ed_mod_e: new_perms.append("MOD_E")
+                                    if ed_mod_f: new_perms.append("MOD_F")
+                                    if ed_mod_g: new_perms.append("MOD_G")
+                                    if ed_mod_bill: new_perms.append("MOD_BILL")
+                                    
+                                    if ed_is_admin:
+                                        target_type = "SUPER_ADMIN" if user.get("account_type") == "SUPER_ADMIN" else "CEO"
+                                    elif ed_is_manager:
+                                        target_type = "MANAGER"
+                                    elif ed_mod_bill:
+                                        target_type = "FREELANCER_CA"
+                                    else:
+                                        target_type = "STAFF"
+                                        
+                                    ok, msg = update_user_permissions(
+                                        user_id=u["user_id"],
+                                        full_name=edit_name,
+                                        phone=edit_phone,
+                                        email=edit_email,
+                                        primary_station=edit_station,
+                                        can_manage_vendors=edit_can_vendor,
+                                        permissions=new_perms,
+                                        account_type=target_type
+                                    )
+                                    if ok:
+                                        st.success("Staff profile updated.")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Update failed: {msg}")
+
+                            # 2. DEACTIVATE / REACTIVATE BUTTON
                             btn_txt = "Deactivate" if is_active else "Reactivate"
                             if st.button(btn_txt, key=f"usr_st_{u['user_id']}", use_container_width=True):
                                 update_user_status(u["user_id"], not is_active)
                                 st.rerun()
 
+                            # 3. DELETE USER POPOVER
                             with st.popover("🗑️ Delete User"):
                                 st.warning(f"Permanently remove @{u['username']}?")
                                 st.caption("If you just want to block login, use 'Deactivate' instead.")

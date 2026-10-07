@@ -274,3 +274,20 @@ def delete_vendor(vendor_id):
         return True
     except Exception:
         return False
+
+def update_user_permissions(user_id, full_name, phone, email, primary_station, can_manage_vendors, permissions, account_type):
+    """Updates existing staff profile, roles, and module access permissions."""
+    try:
+        data = {
+            "full_name": full_name,
+            "phone": phone,
+            "email": email,
+            "primary_station": primary_station,
+            "can_manage_vendors": can_manage_vendors,
+            "permissions": permissions,
+            "account_type": account_type
+        }
+        supabase.table("users").update(data).eq("user_id", int(user_id)).execute()
+        return True, "Profile updated successfully."
+    except Exception as e:
+        return False, str(e)
