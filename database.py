@@ -81,7 +81,7 @@ def get_all_users():
     except Exception:
         return []
 
-def create_user(username, password, full_name, account_type, permissions):
+def create_user(username, password, full_name, account_type, permissions, emp_code="", phone="", email="", primary_station="", can_manage_vendors=False):
     try:
         data = {
             "username": username,
@@ -89,6 +89,11 @@ def create_user(username, password, full_name, account_type, permissions):
             "full_name": full_name,
             "account_type": account_type,
             "permissions": permissions,
+            "emp_code": emp_code,
+            "phone": phone,
+            "email": email,
+            "primary_station": primary_station,
+            "can_manage_vendors": can_manage_vendors,
             "is_active": True
         }
         res = supabase.table("users").insert(data).execute()
