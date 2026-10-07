@@ -236,3 +236,41 @@ def delete_user(user_id):
         return True
     except Exception:
         return False
+
+
+# --- VENDOR MANAGEMENT HELPERS ---
+def get_all_vendors():
+    try:
+        res = supabase.table("vendors").select("*").order("vendor_id").execute()
+        return res.data or []
+    except Exception:
+        return []
+
+def create_vendor(vendor_name, contact_person="", phone="", category="", city="Kolkata"):
+    try:
+        data = {
+            "vendor_name": vendor_name,
+            "contact_person": contact_person,
+            "phone": phone,
+            "category": category,
+            "city": city,
+            "is_active": True
+        }
+        res = supabase.table("vendors").insert(data).execute()
+        return True, res.data
+    except Exception as e:
+        return False, str(e)
+
+def update_vendor_status(vendor_id, is_active):
+    try:
+        supabase.table("vendors").update({"is_active": is_active}).eq("vendor_id", int(vendor_id)).execute()
+        return True
+    except Exception:
+        return False
+
+def delete_vendor(vendor_id):
+    try:
+        supabase.table("vendors").delete().eq("vendor_id", int(vendor_id)).execute()
+        return True
+    except Exception:
+        return False

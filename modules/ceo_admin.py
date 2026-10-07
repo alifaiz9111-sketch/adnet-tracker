@@ -6,7 +6,11 @@ from database import (
     update_user_status, 
     delete_user,
     extend_job_deadline, 
-    delete_job_sheet
+    delete_job_sheet,
+    get_all_vendors,
+    create_vendor,
+    update_vendor_status,
+    delete_vendor
 )
 
 def render_overview(user):
@@ -71,7 +75,7 @@ def render_user_management(user):
     st.subheader("👥 Staff & RBAC Administration")
     st.caption("Manage employee identities, workstation permissions, floor stations, and access status.")
 
-    tab_users, tab_add = st.tabs(["Active Staff Directory", "Add New Staff Member"])
+    tab_users, tab_add, tab_vendors = st.tabs(["Active Staff Directory", "Add New Staff Member", "Vendor Lists"])
 
     # --- TAB 1: ACTIVE STAFF DIRECTORY ---
     with tab_users:
@@ -117,7 +121,6 @@ def render_user_management(user):
                                 update_user_status(u["user_id"], not is_active)
                                 st.rerun()
 
-                            # Delete popover confirmation
                             with st.popover("🗑️ Delete User"):
                                 st.warning(f"Permanently remove @{u['username']}?")
                                 st.caption("If you just want to block login, use 'Deactivate' instead.")
@@ -215,3 +218,65 @@ def render_user_management(user):
                         st.rerun()
                     else:
                         st.error(f"Failed to create employee: {res}")
+
+    # --- TAB 3: VENDOR LISTS ---
+    with tab_vendors:
+        st.markdown("### 🏢 Vendor Master Directory")
+        st.caption("Manage outsourced production vendors, contact details, and active status.")
+
+        # Section to Add a New Vendor
+        with st.expander("➕ Add New Vendor", expanded=False):
+            with st.form("add_vendor_form", clear_on_submit=True):
+                v_col1, v_col2 = st.columns(2)
+                with v_col1:
+                    v_name = st.text_input("Vendor / Company Name *", placeholder="e.g. Balaji Offset Printers").strip()
+                    v_contact = st.text_input("Contact Person", placeholder="e.g. Ramesh Agarwal").strip()
+                    v_phone = st.text_input("Phone / Mobile Number", placeholder="e.g. 9830112233").strip()
+                with v_col2:
+                    v_category = st.text_input("Specialization / Category", placeholder="e.g. Offset Commercial, Laser Cutting, Neon Signage").strip()
+                    v_city = st.text_input("City", value="Kolkata").strip()
+
+                if st.form_submit_button("Add Vendor to Directory", type="primary", use_container_width=True):
+                    if not v_name:
+                        st.error("Vendor Name is mandatory.")
+                    else:
+                        ok, msg = create_vendor(v_name, v_contact, v_phone, v_category, v_city)
+                        if ok:
+                            st.success(f"Vendor '{v_name}' added successfully!")
+                            st.rerun()
+                        else:
+                            st.error(f"Failed to add vendor: {msg}")
+
+        st.markdown("---")
+
+        # List of existing Vendors
+        vendors = get_all_vendors()
+        if not vendors:
+            st.info("No vendors registered in the directory.")
+        else:
+            for v in vendors:
+                with st.container(border=True):
+                    c1, c2, c3 = st.columns([2.5, 2, 1.5])
+                    with c1:
+                        st.markdown(f"### 🏭 {v['vendor_name']}")
+                        st.caption(f"👤 Contact Person: `{v.get('contact_person') or 'N/A'}` | 📱 Phone: `{v.get('phone') or 'N/A'}`")
+                    with c2:
+                        st.markdown(f"**Specialization:** `{v.get('category') or 'General Job-Work'}`")
+                        st.caption(f"📍 City: `{v.get('city') or 'Kolkata'}`")
+                    with c3:
+                        is_active = v.get("is_active", True)
+                        status_label = "🟢 Active" if is_active else "🔴 Inactive"
+                        st.markdown(f"**Status:** {status_label}")
+
+                        btn_txt = "Deactivate" if is_active else "Reactivate"
+                        if st.button(btn_txt, key=f"vnd_st_{v['vendor_id']}", use_container_width=True):
+                            update_vendor_status(v["vendor_id"], not is_active)
+                            st.rerun()
+
+                        with st.popover("🗑️ Delete Vendor"):
+                            st.warning(f"Permanently delete '{v['vendor_name']}'?")
+                            st.caption("Past job references might be affected if deleted.")
+                            if st.button("Confirm Delete", key=f"del_v_{v['vendor_id']}", type="primary", use_container_width=True):
+                                delete_vendor(v["vendor_id"])
+                                st.success(f"Vendor '{v['vendor_name']}' deleted.")
+                                st.rerun()
