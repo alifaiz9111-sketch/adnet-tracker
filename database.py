@@ -329,3 +329,16 @@ def complete_nongst_billing(job_id, settled_by):
         return True, "Job marked completed as Non-GST and settled successfully."
     except Exception as e:
         return False, str(e)
+
+def log_audit(user_id, action, details=""):
+    """Logs system events and user actions to audit_logs."""
+    try:
+        payload = {
+            "user_id": int(user_id) if user_id else None,
+            "action": action,
+            "details": details
+        }
+        supabase.table("audit_logs").insert(payload).execute()
+        return True
+    except Exception:
+        return False
