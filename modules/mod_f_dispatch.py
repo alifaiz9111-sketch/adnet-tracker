@@ -1,99 +1,70 @@
+from datetime import datetime
+import pytz
 import streamlit as st
-from database import (
-    supabase,
-    get_jobs_for_stage,
-    upload_pod_image,
-    complete_dispatch_step,
-    return_job_to_previous_stage
-)
+from database import get_jobs_by_stage, get_job_items, update_job_stage, return_job_to_stage, supabase
+
+IST = pytz.timezone("Asia/Kolkata")
 
 def render(user):
-    st.title("🚚 Workstation 6: Dispatch & Logistics")
-    st.caption("Verify final item packaging, capture physical proof of delivery (POD), and dispatch to billing review.")
+    st.subheader("🚚 Module 6: Dispatch & Line Item Delivery")
+    st.caption("Verify delivery item by item and record gate passes or challans.")
 
-    jobs = get_jobs_for_stage("DISPATCH", is_financial_role=False)
-
+    jobs = get_jobs_by_stage("DISPATCH")
     if not jobs:
-        st.info("No orders currently waiting in the dispatch bay.")
+        st.info("No orders currently at the Dispatch Desk.")
         return
 
     for job in jobs:
+        items = get_job_items(job["job_id"])
+
         with st.container(border=True):
-            col_h1, col_h2 = st.columns([3, 1])
-            with col_h1:
-                st.subheader(f"Job #{job['job_no']} — {job['client_name']}")
-                origin_user = job.get("last_dispatched_by") or job.get("order_taken_by") or "QC/Production"
-                st.caption(f"Cleared from QC by: `{origin_user}`")
-            with col_h2:
-                if job.get("is_returned"):
-                    st.error(f"⚠️ Return Note:\n{job.get('return_reason')}")
-
-            # Delivery Items Verification
-            st.markdown("#### 📦 Package Line Items")
-            items = job.get("items", [])
-            if items:
-                for idx, item in enumerate(items, 1):
-                    st.write(f"• **Item {idx}:** {item.get('description_spec', 'Print Item')} | **Qty:** {item.get('qty', 1)} | **Delivery Address:** {item.get('delivery_address', 'Self Pickup')}")
-            else:
-                st.caption("Standard bulk order packaging.")
+            c1, c2, c3 = st.columns([2, 2, 1])
+            with c1:
+                st.markdown(f"### Job #{job['job_no']} - {job['client_name']}")
+                st.caption(f"Due Date: `{job['due_date']}`")
+            with c2:
+                st.markdown(f"**Recipient Contact:** {job.get('contact_person', 'N/A')} ({job.get('contact_phone', 'N/A')})")
+            with c3:
+                with st.popover("↩️ Return to QC"):
+                    reason = st.text_area("Reason", key=f"ret_disp_{job['job_id']}")
+                    if st.button("Confirm Return", key=f"btn_ret_d_{job['job_id']}", type="primary"):
+                        if reason.strip():
+                            return_job_to_stage(job["job_id"], "QC", reason, user["full_name"])
+                            st.rerun()
 
             st.markdown("---")
+            st.markdown("##### Line Items Delivery Confirmation")
+            item_status_map = {}
 
-            # Dispatch Proof of Delivery (POD) Form
-            st.markdown("#### 📝 Delivery Proof & Gate Pass")
-            col_c1, col_c2 = st.columns(2)
-            with col_c1:
-                challan_no = st.text_input(
-                    "Delivery Challan / Gate Pass Number*",
-                    placeholder="e.g. CH-2026-0891",
-                    key=f"ch_{job['job_id']}"
-                )
-            with col_c2:
-                pod_file = st.file_uploader(
-                    "Proof of Delivery (Camera Photo or Gallery Image)*",
-                    type=["png", "jpg", "jpeg", "pdf"],
-                    key=f"pod_file_{job['job_id']}",
-                    help="Upload a photo of the physically signed receiving copy, delivery slip, or gate pass."
-                )
+            for it in items:
+                col_i, col_d, col_c = st.columns([2, 3, 1])
+                with col_i:
+                    st.write(f"**{it['item_name']}** (Qty: {it['quantity']} {it['unit']})")
+                with col_d:
+                    st.caption(f"📍 Address: {it.get('delivery_address', 'Self Pickup')}")
+                with col_c:
+                    is_del = st.checkbox("Delivered", value=it.get("is_delivered", False), key=f"del_{it['item_id']}")
+                    item_status_map[it["item_id"]] = is_del
 
-            # Return Option
-            with st.popover("↩️ Return to Quality Control (QC)"):
-                reason = st.text_area("Reason for Return*", placeholder="e.g., Damaged during packing, missing roll bundle", key=f"r_disp_{job['job_id']}")
-                if st.button("Confirm Return to QC", key=f"btn_r_disp_{job['job_id']}", type="primary"):
-                    if reason.strip():
-                        return_job_to_previous_stage(
-                            job_id=job['job_id'],
-                            previous_stage="QC",
-                            holding_role="QC_INSPECTOR",
-                            reason=f"[Dispatch] {reason.strip()}",
-                            returned_by_name=user['username']
-                        )
-                        st.warning("Job returned to Quality Check.")
-                        st.rerun()
-                    st.error("Please enter a return reason.")
+            with st.form(f"dispatch_form_{job['job_id']}"):
+                col_x, col_y = st.columns(2)
+                with col_x:
+                    challan_no = st.text_input("Delivery Challan / Gate Pass #")
+                    delivery_agent = st.text_input("Delivery Boy / Transporter Name")
+                with col_y:
+                    vehicle_no = st.text_input("Vehicle Number")
+                    pod_notes = st.text_input("Proof of Delivery Remarks")
 
-            st.markdown("---")
+                if st.form_submit_button("Update Delivery & Forward to Billing Review", type="primary", use_container_width=True):
+                    # Persist line items delivery status
+                    now_iso = datetime.now(IST).isoformat()
+                    for it_id, del_val in item_status_map.items():
+                        supabase.table("job_items").update({
+                            "is_delivered": del_val,
+                            "delivered_at": now_iso if del_val else None
+                        }).eq("item_id", it_id).execute()
 
-            # Final Gate Dispatch Button
-            if st.button("🚀 Confirm Dispatch & Send to Billing", key=f"btn_disp_comp_{job['job_id']}", type="primary", use_container_width=True):
-                if not challan_no.strip():
-                    st.error("Delivery Challan / Gate Pass Number is strictly mandatory.")
-                elif pod_file is None:
-                    st.error("Proof of Delivery (signed challan photo or image) is strictly required to proceed.")
-                else:
-                    with st.spinner("Uploading proof of delivery receipt..."):
-                        pod_url = upload_pod_image(job['job_id'], pod_file)
-                        if not pod_url:
-                            st.error("Failed to upload delivery proof image. Please retry.")
-                        else:
-                            success = complete_dispatch_step(
-                                job_id=job['job_id'],
-                                challan_no=challan_no.strip(),
-                                pod_url=pod_url,
-                                dispatched_by=user['username']
-                            )
-                            if success:
-                                st.success(f"Job #{job['job_no']} successfully dispatched and forwarded to Billing Review.")
-                                st.rerun()
-                            else:
-                                st.error("Failed to update dispatch record. Check database logs.")
+                    audit_msg = f"Challan: {challan_no} | Agent: {delivery_agent} | Veh: {vehicle_no} | Notes: {pod_notes}"
+                    update_job_stage(job["job_id"], "BILLING_REVIEW", user["full_name"], audit_msg)
+                    st.success(f"Job #{job['job_no']} forwarded to Billing Review.")
+                    st.rerun()
