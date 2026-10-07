@@ -1,22 +1,18 @@
 import os
 from datetime import datetime
 import pytz
+import streamlit as st
 from supabase import create_client, Client
 
 IST = pytz.timezone("Asia/Kolkata")
 
-# Fetch Supabase configuration from environment variables or Streamlit secrets
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+# Fetch credentials from st.secrets first, then fall back to environment variables
+SUPABASE_URL = st.secrets.get("SUPABASE_URL", os.getenv("SUPABASE_URL", ""))
+SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", os.getenv("SUPABASE_KEY", ""))
 
-try:
-    import streamlit as st
-    if not SUPABASE_URL and "SUPABASE_URL" in st.secrets:
-        SUPABASE_URL = st.secrets["SUPABASE_URL"]
-    if not SUPABASE_KEY and "SUPABASE_KEY" in st.secrets:
-        SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
-except Exception:
-    pass
+if not SUPABASE_URL or not SUPABASE_KEY:
+    st.error("⚠️ Supabase credentials missing! Please configure SUPABASE_URL and SUPABASE_KEY in Streamlit Cloud Secrets.")
+    st.stop()
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
