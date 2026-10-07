@@ -4,6 +4,7 @@ from database import (
     get_all_users, 
     create_user, 
     update_user_status, 
+    delete_user,
     extend_job_deadline, 
     delete_job_sheet
 )
@@ -68,7 +69,7 @@ def render_overview(user):
 
 def render_user_management(user):
     st.subheader("👥 Staff & RBAC Administration")
-    st.caption("Manage employee identities, workstation permissions, floor stations, and vendor authority.")
+    st.caption("Manage employee identities, workstation permissions, floor stations, and access status.")
 
     tab_users, tab_add = st.tabs(["Active Staff Directory", "Add New Staff Member"])
 
@@ -77,7 +78,7 @@ def render_user_management(user):
         users = get_all_users()
         current_account_type = user.get("account_type")
 
-        # The CEO cannot view or tamper with the root admin account
+        # The CEO cannot view or modify the root admin account
         display_users = [
             u for u in users 
             if not (current_account_type == "CEO" and u.get("username") == "admin")
@@ -88,7 +89,7 @@ def render_user_management(user):
         else:
             for u in display_users:
                 with st.container(border=True):
-                    c1, c2, c3 = st.columns([2.5, 2.5, 1])
+                    c1, c2, c3 = st.columns([2.5, 2, 1.5])
                     with c1:
                         emp_badge = f"`[{u.get('emp_code')}]` " if u.get("emp_code") else ""
                         st.markdown(f"### {emp_badge}{u['full_name']}")
@@ -104,19 +105,30 @@ def render_user_management(user):
                         st.write(f"**Allowed Modules:** {', '.join(u.get('permissions', []) or ['None'])}")
 
                     with c3:
-                        if u["username"] != "admin":
+                        if u["username"] == "admin":
+                            st.info("System Root Account")
+                        else:
                             is_active = u.get("is_active", True)
                             status_label = "🟢 Active" if is_active else "🔴 Inactive"
                             st.markdown(f"**Status:** {status_label}")
+                            
                             btn_txt = "Deactivate" if is_active else "Reactivate"
                             if st.button(btn_txt, key=f"usr_st_{u['user_id']}", use_container_width=True):
                                 update_user_status(u["user_id"], not is_active)
                                 st.rerun()
 
+                            # Delete popover confirmation
+                            with st.popover("🗑️ Delete User"):
+                                st.warning(f"Permanently remove @{u['username']}?")
+                                st.caption("If you just want to block login, use 'Deactivate' instead.")
+                                if st.button("Confirm Delete", key=f"del_u_{u['user_id']}", type="primary", use_container_width=True):
+                                    delete_user(u["user_id"])
+                                    st.success(f"User @{u['username']} deleted.")
+                                    st.rerun()
+
     # --- TAB 2: ADD NEW STAFF MEMBER ---
     with tab_add:
         with st.form("add_user_form", clear_on_submit=True):
-            # Section 1: Basic Identity
             st.markdown("#### 1. Basic Identity")
             i1, i2, i3 = st.columns(3)
             with i1:
@@ -126,7 +138,6 @@ def render_user_management(user):
             with i3:
                 new_email = st.text_input("Email Address (Optional)", placeholder="e.g. rahul@adnet.com").strip()
 
-            # Section 2: Login & Security
             st.markdown("#### 2. Login & Security")
             l1, l2, l3 = st.columns(3)
             with l1:
@@ -136,7 +147,6 @@ def render_user_management(user):
             with l3:
                 new_password = st.text_input("Temporary Password / PIN *", type="password", placeholder="Initial Password").strip()
 
-            # Section 3: Floor Assignment
             st.markdown("#### 3. Floor Assignment & Vendor Authority")
             f1, f2 = st.columns([2, 1])
             with f1:
@@ -145,7 +155,6 @@ def render_user_management(user):
                 st.markdown("<br>", unsafe_allow_html=True)
                 can_manage_vendors = st.checkbox("Can Manage / Assign Vendors?", help="Check this if this employee can assign outsourced work to third-party vendors.")
 
-            # Section 4: Workstation Checklist (RBAC)
             st.markdown("#### 4. Assigned Roles & Workstation Desks (Checklist)")
             st.caption("Check all workstation modules this employee is authorized to access:")
 
@@ -171,7 +180,6 @@ def render_user_management(user):
                 if not (new_name and new_phone and emp_code and new_username and new_password):
                     st.error("Please fill in all mandatory fields (Full Name, Phone, Employee Code, Username, and Password).")
                 else:
-                    # Build permissions array from checklist
                     permissions = []
                     if mod_a: permissions.append("MOD_A")
                     if mod_b: permissions.append("MOD_B")
@@ -182,7 +190,6 @@ def render_user_management(user):
                     if mod_g: permissions.append("MOD_G")
                     if mod_bill: permissions.append("MOD_BILL")
 
-                    # Determine Account Role Type
                     if is_management:
                         account_type = "SUPER_ADMIN" if user.get("account_type") == "SUPER_ADMIN" else "CEO"
                     elif mod_bill:

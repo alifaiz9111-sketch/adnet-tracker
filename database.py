@@ -228,3 +228,11 @@ def delete_job_sheet(job_id):
         except Exception:
             pass
     return True
+
+def delete_user(user_id):
+    """Permanently deletes a user from the directory."""
+    try:
+        supabase.table("users").delete().eq("user_id", int(user_id)).execute()
+        return True
+    except Exception:
+        return False
