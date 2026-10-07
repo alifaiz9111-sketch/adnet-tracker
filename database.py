@@ -309,6 +309,7 @@ def authorize_gst_billing(job_id, authorized_by):
     try:
         data = {
             "current_stage": "BILLING_QUEUE",
+            "billing_type": "GST",
             "is_billed": False
         }
         supabase.table("jobs").update(data).eq("job_id", int(job_id)).execute()
@@ -321,6 +322,7 @@ def complete_nongst_billing(job_id, settled_by):
     try:
         data = {
             "current_stage": "SETTLED",
+            "billing_type": "NON_GST",
             "is_billed": True
         }
         supabase.table("jobs").update(data).eq("job_id", int(job_id)).execute()

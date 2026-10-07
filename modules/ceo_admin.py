@@ -141,6 +141,7 @@ def render_user_management(user):
                                     ed_mod_f = st.checkbox("🚚 Dispatch (Mod 6)", value=("MOD_F" in cur_perms), key=f"ed_mf_{u['user_id']}")
                                     ed_mod_g = st.checkbox("🧾 Billing Review (Mod 7)", value=("MOD_G" in cur_perms), key=f"ed_mg_{u['user_id']}")
                                     ed_mod_bill = st.checkbox("💼 CA Desk (Mod 8)", value=("MOD_BILL" in cur_perms), key=f"ed_mbill_{u['user_id']}")
+                                    ed_view_bills = st.checkbox("📥 Can View & Download Bills Only", value=("VIEW_BILLS" in cur_perms), key=f"ed_vbill_{u['user_id']}")
                                 
                                 st.markdown("---")
                                 cur_acc_type = u.get("account_type", "STAFF")
@@ -157,6 +158,7 @@ def render_user_management(user):
                                     if ed_mod_f: new_perms.append("MOD_F")
                                     if ed_mod_g: new_perms.append("MOD_G")
                                     if ed_mod_bill: new_perms.append("MOD_BILL")
+                                    if ed_view_bills: new_perms.append("VIEW_BILLS")
                                     
                                     if ed_is_admin:
                                         target_type = "SUPER_ADMIN" if user.get("account_type") == "SUPER_ADMIN" else "CEO"
@@ -241,7 +243,8 @@ def render_user_management(user):
                 mod_e = st.checkbox("🔍 Quality Check - QC (Module 5)")
                 mod_f = st.checkbox("🚚 Dispatch & Field Delivery (Module 6)")
                 mod_g = st.checkbox("🧾 Billing Review (Module 7)")
-                mod_bill = st.checkbox("💼 Accounts / CA Desk - GST Invoicing (Module 8)")
+                mod_bill = st.checkbox("💼 CA Desk - GST Invoicing (Module 8)")
+                can_view_bills = st.checkbox("📥 Can View & Download Bills Only")
 
             st.markdown("---")
             is_manager_role = st.checkbox("👔 Floor Manager Role (Full visibility across all stages, specs, and holding in-charges)")
@@ -262,6 +265,7 @@ def render_user_management(user):
                     if mod_f: permissions.append("MOD_F")
                     if mod_g: permissions.append("MOD_G")
                     if mod_bill: permissions.append("MOD_BILL")
+                    if can_view_bills: permissions.append("VIEW_BILLS")
 
                     if is_management:
                         account_type = "SUPER_ADMIN" if user.get("account_type") == "SUPER_ADMIN" else "CEO"
@@ -296,7 +300,6 @@ def render_user_management(user):
         st.markdown("### 🏢 Vendor Master Directory")
         st.caption("Manage outsourced production vendors, contact details, and active status.")
 
-        # Section to Add a New Vendor
         with st.expander("➕ Add New Vendor", expanded=False):
             with st.form("add_vendor_form", clear_on_submit=True):
                 v_col1, v_col2 = st.columns(2)
@@ -321,7 +324,6 @@ def render_user_management(user):
 
         st.markdown("---")
 
-        # List of existing Vendors
         vendors = get_all_vendors()
         if not vendors:
             st.info("No vendors registered in the directory.")
