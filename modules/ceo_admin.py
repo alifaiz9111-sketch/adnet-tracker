@@ -175,6 +175,7 @@ def render_user_management(user):
                 mod_bill = st.checkbox("💼 Accounts / CA Desk - GST Invoicing (Module 8)")
 
             st.markdown("---")
+            is_manager_role = st.checkbox("👔 Floor Manager Role (Full visibility across all stages, specs, and holding in-charges)")
             is_management = st.checkbox("👑 Executive / Management Level Access (Access to Reports & User Admin)")
 
             submit = st.form_submit_button("Create Employee Profile", type="primary", use_container_width=True)
@@ -195,6 +196,8 @@ def render_user_management(user):
 
                     if is_management:
                         account_type = "SUPER_ADMIN" if user.get("account_type") == "SUPER_ADMIN" else "CEO"
+                    elif is_manager_role:
+                        account_type = "MANAGER"
                     elif mod_bill:
                         account_type = "FREELANCER_CA"
                     else:

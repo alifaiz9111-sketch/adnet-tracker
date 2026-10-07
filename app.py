@@ -1,3 +1,4 @@
+from modules import manager_view
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -196,6 +197,9 @@ def main():
     cnt_g = get_stage_job_count("BILLING_REVIEW")
 
     menu_options = {}
+
+    if account_type in ["MANAGER", "SUPER_ADMIN", "CEO"]:
+        menu_options["🔍 Manager Track & Audit"] = manager_view.render
 
     if account_type in ["SUPER_ADMIN", "CEO"]:
         menu_options["👑 Executive Overview"] = ceo_admin.render_overview
