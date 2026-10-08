@@ -8,21 +8,6 @@ from database import (
 )
 
 
-def calculate_item_amount(qty, rate, length, breadth, dim_unit):
-    """Calculates total amount based on dimensions if provided, else qty * rate."""
-    if length > 0 and breadth > 0:
-        if dim_unit == "Inch":
-            sq_ft = (length * breadth) / 144.0
-        elif dim_unit == "Ft":
-            sq_ft = length * breadth
-        elif dim_unit == "Mm":
-            sq_ft = (length * breadth) / 92903.04
-        else:
-            sq_ft = length * breadth
-        return round(sq_ft * qty * rate, 2), round(sq_ft, 2)
-    return round(qty * rate, 2), 0.0
-
-
 def render(user):
     st.subheader("📝 Module 1: Order Intake & Commercial Jobsheet Creation")
     st.caption(
@@ -121,25 +106,15 @@ def render(user):
                         key=f"item_rate_{idx}",
                     )
                 with r_c4:
-                    calculated_amt, calculated_sqft = calculate_item_amount(
-                        item["quantity"],
-                        item["rate"],
-                        item.get("length", 0.0),
-                        item.get("breadth", 0.0),
-                        item.get("dim_unit", "Inch")
-                    )
-                    item["amount"] = calculated_amt
-                    if calculated_sqft > 0:
-                        st.metric("Total Amount", f"₹ {item['amount']:,.2f}", help=f"Total Sq.Ft per pc: {calculated_sqft}")
-                    else:
-                        st.metric("Total Amount", f"₹ {item['amount']:,.2f}")
+                    item["amount"] = round(item["quantity"] * item["rate"], 2)
+                    st.metric("Total Amount", f"₹ {item['amount']:,.2f}")
                 with r_c5:
                     if len(st.session_state.sales_items) > 1:
                         if st.button("🗑️", key=f"del_row_{idx}"):
                             rows_to_remove.append(idx)
 
-                # Row 2: Optional Dimensions (Length, Breadth, Height & Unit)
-                st.caption("📐 **Optional Sizes / Dimensions** (Leave 0 to calculate as standard Qty × Rate):")
+                # Row 2: Optional Sizes (Length, Breadth, Height & Unit) for specs only
+                st.caption("📐 **Optional Sizes / Dimensions** (For Design, Floor & Delivery reference only):")
                 s_c1, s_c2, s_c3, s_c4 = st.columns(4)
                 with s_c1:
                     item["length"] = st.number_input(
@@ -166,7 +141,7 @@ def render(user):
                         key=f"item_hgt_{idx}",
                     )
                 with s_c4:
-                    unit_options = ["Inch", "Ft", "Mm"]
+                    unit_options = ["Inch", "Ft"]
                     cur_u = item.get("dim_unit", "Inch")
                     u_idx = unit_options.index(cur_u) if cur_u in unit_options else 0
                     item["dim_unit"] = st.selectbox(
@@ -243,7 +218,7 @@ def render(user):
                         "item_name": it["item_name"].strip(),
                         "specifications": full_spec,
                         "quantity": it["quantity"],
-                        "unit": it.get("dim_unit", "Pcs") if size_parts else "Pcs",
+                        "unit": "Pcs",
                         "rate": it["rate"],
                         "amount": it["amount"],
                         "delivery_address": it.get("delivery_address", "").strip(),
