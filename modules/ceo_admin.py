@@ -4,6 +4,7 @@ from database import (
     get_all_users, 
     create_user, 
     update_user_status, 
+    update_user_permissions,
     delete_user,
     extend_job_deadline, 
     delete_job_sheet,
@@ -115,6 +116,60 @@ def render_user_management(user):
                             is_active = u.get("is_active", True)
                             status_label = "🟢 Active" if is_active else "🔴 Inactive"
                             st.markdown(f"**Status:** {status_label}")
+
+                            # Edit Permissions Popover
+                            with st.popover("✏️ Edit Role & Modules", use_container_width=True):
+                                st.markdown(f"**Modify Access for @{u.get('username')}**")
+                                
+                                cur_perms = u.get("permissions") or []
+                                cur_station = u.get("primary_station") or ""
+                                cur_role = u.get("account_type", "STAFF")
+                                
+                                edit_station = st.text_input("Primary Station", value=cur_station, key=f"e_st_{u['user_id']}")
+                                edit_can_vendor = st.checkbox("Can Manage / Assign Vendors?", value=bool(u.get("can_manage_vendors")), key=f"e_v_{u['user_id']}")
+                                
+                                st.markdown("##### Assigned Workstations")
+                                e_mod_a = st.checkbox("📝 Sales & Intake (Module 1)", value=("MOD_A" in cur_perms), key=f"e_ma_{u['user_id']}")
+                                e_mod_b = st.checkbox("🎨 Design / Pre-Press (Module 2)", value=("MOD_B" in cur_perms), key=f"e_mb_{u['user_id']}")
+                                e_mod_c = st.checkbox("💳 Accounts & Advance (Module 3)", value=("MOD_C" in cur_perms), key=f"e_mc_{u['user_id']}")
+                                e_mod_d = st.checkbox("⚙️ Production Floor (Module 4)", value=("MOD_D" in cur_perms), key=f"e_md_{u['user_id']}")
+                                e_mod_e = st.checkbox("🔍 Quality Check - QC (Module 5)", value=("MOD_E" in cur_perms), key=f"e_me_{u['user_id']}")
+                                e_mod_f = st.checkbox("🚚 Dispatch & Delivery (Module 6)", value=("MOD_F" in cur_perms), key=f"e_mf_{u['user_id']}")
+                                e_mod_g = st.checkbox("🧾 Billing & Settlement (Module 7)", value=("MOD_G" in cur_perms), key=f"e_mg_{u['user_id']}")
+                                
+                                st.markdown("##### Role Elevation")
+                                e_is_manager = st.checkbox("👔 Floor Manager Role", value=(cur_role == "MANAGER"), key=f"e_mgr_{u['user_id']}")
+                                e_is_admin = st.checkbox("👑 Executive Access", value=(cur_role in ["SUPER_ADMIN", "CEO"]), key=f"e_adm_{u['user_id']}")
+
+                                if st.button("Save Changes", key=f"btn_save_u_{u['user_id']}", type="primary", use_container_width=True):
+                                    new_perms = []
+                                    if e_mod_a: new_perms.append("MOD_A")
+                                    if e_mod_b: new_perms.append("MOD_B")
+                                    if e_mod_c: new_perms.append("MOD_C")
+                                    if e_mod_d: new_perms.append("MOD_D")
+                                    if e_mod_e: new_perms.append("MOD_E")
+                                    if e_mod_f: new_perms.append("MOD_F")
+                                    if e_mod_g: new_perms.append("MOD_G")
+
+                                    if e_is_admin:
+                                        target_role = "SUPER_ADMIN" if user.get("account_type") == "SUPER_ADMIN" else "CEO"
+                                    elif e_is_manager:
+                                        target_role = "MANAGER"
+                                    else:
+                                        target_role = "STAFF"
+
+                                    ok, msg = update_user_permissions(
+                                        user_id=u["user_id"],
+                                        account_type=target_role,
+                                        permissions=new_perms,
+                                        can_manage_vendors=edit_can_vendor,
+                                        primary_station=edit_station
+                                    )
+                                    if ok:
+                                        st.success("Updated successfully.")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Update failed: {msg}")
 
                             btn_txt = "Deactivate" if is_active else "Reactivate"
                             if st.button(btn_txt, key=f"usr_st_{u['user_id']}", use_container_width=True):

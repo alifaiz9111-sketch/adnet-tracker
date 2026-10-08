@@ -102,6 +102,19 @@ def update_user_status(user_id, is_active):
     except Exception as e:
         return False, str(e)
 
+def update_user_permissions(user_id, account_type, permissions, can_manage_vendors, primary_station=""):
+    try:
+        payload = {
+            "account_type": account_type,
+            "permissions": permissions,
+            "can_manage_vendors": can_manage_vendors,
+            "primary_station": primary_station.strip()
+        }
+        supabase.table("users").update(payload).eq("user_id", int(user_id)).execute()
+        return True, "User permissions updated successfully."
+    except Exception as e:
+        return False, str(e)
+
 
 def delete_user(user_id):
     try:
