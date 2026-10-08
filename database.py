@@ -385,3 +385,17 @@ def claim_design_job(job_id, designer_name):
         return True, "Job successfully claimed!"
     except Exception as e:
         return False, str(e)
+
+def reject_job_to_sales(job_id, designer_name, reason):
+    """Flags a specification issue and routes the job back to Sales intake."""
+    try:
+        supabase.table("jobs").update({
+            "current_stage": "DESIGN",
+            "is_returned": True,
+            "returned_by": f"Designer ({designer_name})",
+            "return_reason": f"[SPEC_ISSUE] {reason.strip()}"
+        }).eq("job_id", int(job_id)).execute()
+        log_audit(0, "SPEC_ISSUE_FLAGGED", f"Job #{job_id} flagged by {designer_name}: {reason.strip()}")
+        return True, "Spec issue flagged. Sales notified."
+    except Exception as e:
+        return False, str(e)
