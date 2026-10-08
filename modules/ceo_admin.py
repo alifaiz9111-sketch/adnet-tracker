@@ -83,7 +83,6 @@ def render_user_management(user):
         users = get_all_users()
         current_account_type = user.get("account_type")
 
-        # The CEO cannot view or modify the root admin account
         display_users = [
             u for u in users 
             if not (current_account_type == "CEO" and u.get("username") == "admin")
@@ -117,7 +116,6 @@ def render_user_management(user):
                             status_label = "🟢 Active" if is_active else "🔴 Inactive"
                             st.markdown(f"**Status:** {status_label}")
 
-                            # Edit Permissions Popover
                             with st.popover("✏️ Edit Role & Modules", use_container_width=True):
                                 st.markdown(f"**Modify Access for @{u.get('username')}**")
                                 
@@ -191,14 +189,14 @@ def render_user_management(user):
             with i1:
                 new_name = st.text_input("Full Name *", placeholder="e.g. Rahul Sharma").strip()
             with i2:
-                new_phone = st.text_input("Mobile / Phone Number *", placeholder="e.g. 9876543210").strip()
+                new_phone = st.text_input("Mobile / Phone Number *", placeholder="e.g. 9830112233").strip()
             with i3:
                 new_email = st.text_input("Email Address (Optional)", placeholder="e.g. rahul@adnet.com").strip()
 
             st.markdown("#### 2. Login & Security")
             l1, l2, l3 = st.columns(3)
             with l1:
-                emp_code = st.text_input("Employee Code / ID *", placeholder="e.g. EMP-104 or OP-09").strip()
+                emp_code = st.text_input("Employee Code / ID *", placeholder="e.g. EMP-104").strip()
             with l2:
                 new_username = st.text_input("Username *", placeholder="e.g. rahul104").strip()
             with l3:

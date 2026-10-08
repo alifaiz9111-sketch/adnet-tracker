@@ -1,8 +1,7 @@
-from database import authenticate_user, supabase, log_audit, update_user_password
 import os
 import streamlit as st
 import time
-from database import authenticate_user, supabase, log_audit
+from database import authenticate_user, supabase, log_audit, update_user_password
 from modules import (
     mod_a_sales,
     mod_b_design,
@@ -56,9 +55,19 @@ def render_ceo_briefing_dialog(user):
         c3.metric("Live Order Value", f"₹ {val:,.2f}")
 
         st.markdown("---")
-        if st.button("Enter Management Workspace", type="primary", use_container_width=True):
-            st.session_state.ceo_modal_seen = True
-            st.rerun()
+        btn_c1, btn_c2 = st.columns(2)
+        with btn_c1:
+            if st.button("📧 Email Report to CEO", use_container_width=True):
+                from email_service import send_ceo_daily_report
+                ok, res_msg = send_ceo_daily_report()
+                if ok:
+                    st.success(res_msg)
+                else:
+                    st.error(res_msg)
+        with btn_c2:
+            if st.button("Enter Management Workspace", type="primary", use_container_width=True):
+                st.session_state.ceo_modal_seen = True
+                st.rerun()
 
     briefing()
 
@@ -75,9 +84,8 @@ def main():
                 os.path.join(base_dir, "assets", "logo.PNG"),
                 os.path.join(base_dir, "logo.png"),
             ]
-            
             resolved_logo = next((p for p in candidate_paths if os.path.exists(p)), None)
-            
+
             if resolved_logo:
                 st.image(resolved_logo, use_container_width=True)
             else:

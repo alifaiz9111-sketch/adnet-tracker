@@ -8,17 +8,6 @@ from database import (
 )
 
 
-def calculate_item_amount(qty, rate, length, breadth, height):
-    """Calculates amount strictly as L x B x H x Qty x Rate."""
-    l_val = length if length > 0 else 1.0
-    b_val = breadth if breadth > 0 else 1.0
-    h_val = height if height > 0 else 1.0
-
-    multiplier = l_val * b_val * h_val
-    total = round(multiplier * qty * rate, 2)
-    return total, multiplier
-
-
 def render(user):
     st.subheader("📝 Module 1: Order Intake & Commercial Jobsheet Creation")
     st.caption(
@@ -31,7 +20,6 @@ def render(user):
     with t_create:
         suggested_no = get_next_job_no()
 
-        # Initialize dynamic item rows with required defaults
         if "sales_items" not in st.session_state:
             st.session_state.sales_items = [{
                 "item_name": "",
@@ -95,7 +83,6 @@ def render(user):
         rows_to_remove = []
         for idx, item in enumerate(st.session_state.sales_items):
             with st.container(border=True):
-                # Header Row: Item Name & Delete Button
                 top_c1, top_c2 = st.columns([5.5, 0.5])
                 with top_c1:
                     item["item_name"] = st.text_input(
@@ -109,7 +96,6 @@ def render(user):
                         if st.button("🗑️", key=f"del_row_{idx}"):
                             rows_to_remove.append(idx)
 
-                # Row 1: Dimensions (Length, Breadth, Height & Unit)
                 st.caption("📐 **Sizes / Dimensions** (Default: 1 × 1 × 1):")
                 s_c1, s_c2, s_c3, s_c4 = st.columns(4)
                 with s_c1:
@@ -147,7 +133,6 @@ def render(user):
                         key=f"item_dunit_{idx}",
                     )
 
-                # Row 2: Commercials (Quantity, Rate & Real-Time Amount)
                 r_c1, r_c2, r_c3 = st.columns([1.5, 1.5, 2])
                 with r_c1:
                     item["quantity"] = st.number_input(
@@ -166,15 +151,12 @@ def render(user):
                         key=f"item_rate_{idx}",
                     )
                 with r_c3:
-                    # Live calculation using freshly updated variables
                     l_val = item["length"] if item["length"] > 0 else 1.0
                     b_val = item["breadth"] if item["breadth"] > 0 else 1.0
                     h_val = item["height"] if item["height"] > 0 else 1.0
-                    
                     item["amount"] = round(l_val * b_val * h_val * item["quantity"] * item["rate"], 2)
                     st.metric("Total Line Amount", f"₹ {item['amount']:,.2f}")
 
-                # Row 3: Specifications and Delivery Address
                 d_c1, d_c2 = st.columns(2)
                 with d_c1:
                     item["specifications"] = st.text_input(
@@ -191,13 +173,11 @@ def render(user):
                         key=f"item_addr_{idx}",
                     )
 
-        # Process removals
         if rows_to_remove:
             for r_idx in sorted(rows_to_remove, reverse=True):
                 st.session_state.sales_items.pop(r_idx)
             st.rerun()
 
-        # Total Pipeline Value
         grand_total = sum(it["amount"] for it in st.session_state.sales_items)
         st.markdown(f"### Grand Total Order Value: `₹ {grand_total:,.2f}`")
 
@@ -220,11 +200,9 @@ def render(user):
                     "is_billed": False,
                 }
 
-                # Prepare items with consolidated size specs
                 prepared_items = []
                 for it in st.session_state.sales_items:
                     size_str = f"Size: {it.get('length', 1.0)} x {it.get('breadth', 1.0)} x {it.get('height', 1.0)} {it.get('dim_unit', 'Inch')}"
-                    
                     full_spec = it.get("specifications", "").strip()
                     if size_str:
                         full_spec = f"{size_str} | {full_spec}" if full_spec else size_str

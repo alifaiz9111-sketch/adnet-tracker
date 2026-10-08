@@ -267,3 +267,40 @@ def delete_job_sheet(job_id):
         return True, "Job sheet deleted."
     except Exception as e:
         return False, str(e)
+
+def update_user_password(user_id, old_password, new_password):
+    """Allows an active user to change their password after verifying their old password."""
+    try:
+        res = (
+            supabase.table("users")
+            .select("user_id")
+            .eq("user_id", int(user_id))
+            .eq("password_hash", old_password.strip())
+            .execute()
+        )
+        if not res.data:
+            return False, "Current password does not match."
+
+        supabase.table("users").update({
+            "password_hash": new_password.strip()
+        }).eq("user_id", int(user_id)).execute()
+
+        log_audit(user_id, "PASSWORD_CHANGED", "User successfully changed their password.")
+        return True, "Password updated successfully!"
+    except Exception as e:
+        return False, str(e)
+
+
+def update_user_permissions(user_id, account_type, permissions, can_manage_vendors, primary_station=""):
+    """Updates roles, permissions, vendor privileges, and station for an existing staff member."""
+    try:
+        payload = {
+            "account_type": account_type,
+            "permissions": permissions,
+            "can_manage_vendors": can_manage_vendors,
+            "primary_station": primary_station.strip()
+        }
+        supabase.table("users").update(payload).eq("user_id", int(user_id)).execute()
+        return True, "User permissions updated successfully."
+    except Exception as e:
+        return False, str(e)
