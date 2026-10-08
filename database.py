@@ -42,13 +42,13 @@ def log_audit(user_id, action, details=""):
 
 
 def authenticate_user(username, password):
-    """Authenticates staff/admin user and validates active status."""
+    """Authenticates staff/admin user against password_hash and validates active status."""
     try:
         res = (
             supabase.table("users")
             .select("*")
             .eq("username", username.strip())
-            .eq("password", password.strip())
+            .eq("password_hash", password.strip())
             .eq("is_active", True)
             .execute()
         )
@@ -78,7 +78,7 @@ def create_user(username, password, full_name, account_type, permissions, emp_co
     try:
         payload = {
             "username": username.strip(),
-            "password": password.strip(),
+            "password_hash": password.strip(),
             "full_name": full_name.strip(),
             "account_type": account_type,
             "permissions": permissions,
@@ -94,7 +94,6 @@ def create_user(username, password, full_name, account_type, permissions, emp_co
         return True, res.data
     except Exception as e:
         return False, str(e)
-
 
 def update_user_status(user_id, is_active):
     try:
