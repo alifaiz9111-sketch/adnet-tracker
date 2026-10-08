@@ -44,24 +44,14 @@ def render(user):
             with c3:
                 st.metric("Total Order Value", f"₹ {total_val:,.2f}")
                 
-                with st.popover("🚀 Complete Design / Route"):
-                    st.markdown("#### Design Clearance")
-                    proof_url = st.text_input("Design File / Drive Link", placeholder="https://drive.google.com/...", key=f"dsg_url_{job['job_id']}")
-                    next_stage = st.selectbox(
-                        "Next Stage Target",
-                        ["PAYMENT", "PRODUCTION"],
-                        format_func=lambda x: "💳 Advance / Accounts Clearance" if x == "PAYMENT" else "⚙️ Production Floor",
-                        key=f"nxt_stg_{job['job_id']}"
-                    )
-                    
-                    if st.button("Approve Proof & Forward", key=f"btn_dsg_{job['job_id']}", type="primary", use_container_width=True):
-                        try:
-                            update_data = {
-                                "current_stage": next_stage,
-                                "is_returned": False
-                            }
-                            supabase.table("jobs").update(update_data).eq("job_id", int(job["job_id"])).execute()
-                            st.success(f"Job #{job.get('job_no')} forwarded to {next_stage} successfully.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error updating stage: {e}")
+                if st.button("✅ Approved", key=f"btn_app_{job['job_id']}", type="primary", use_container_width=True):
+                    try:
+                        update_data = {
+                            "current_stage": "PAYMENT",
+                            "is_returned": False
+                        }
+                        supabase.table("jobs").update(update_data).eq("job_id", int(job["job_id"])).execute()
+                        st.success(f"Job #{job.get('job_no')} approved and forwarded.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error approving job: {e}")
