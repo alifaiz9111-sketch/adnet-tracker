@@ -33,6 +33,15 @@ def render_overview(user):
     total_val = sum(float(it.get("amount", 0) or 0) for it in all_items)
 
     k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        st.metric("Total Jobs Logged", total_orders)
+    with k2:
+        st.metric("Active On Floor", len(active_jobs))
+    with k3:
+        st.metric("Billed & Settled", len(settled_jobs))
+    with k4:
+        st.metric("Pipeline Value", f"₹ {total_val:,.2f}")
+
     # --- PENDING DELETION REQUESTS FOR CEO / ADMIN ---
     del_requested_jobs = [
         j for j in all_jobs 
@@ -64,14 +73,6 @@ def render_overview(user):
                             reject_job_deletion_request(dj["job_id"])
                             st.info(f"Deletion request rejected for Job #{dj.get('job_no')}.")
                             st.rerun()
-    with k1:
-        st.metric("Total Jobs Logged", total_orders)
-    with k2:
-        st.metric("Active On Floor", len(active_jobs))
-    with k3:
-        st.metric("Billed & Settled", len(settled_jobs))
-    with k4:
-        st.metric("Pipeline Value", f"₹ {total_val:,.2f}")
 
     st.markdown("---")
     st.markdown("#### 🛠️ Active Jobs Management & Deadline Extensions")
@@ -95,7 +96,7 @@ def render_overview(user):
                         st.success("Target delivery date updated.")
                         st.rerun()
             with c3:
-                if user.get("account_type") == "SUPER_ADMIN":
+                if user.get("account_type") in ["SUPER_ADMIN", "CEO"]:
                     with st.popover("🗑️ Cascading Delete"):
                         st.warning("Permanently delete this entire jobsheet and all child records?")
                         if st.button("Confirm Delete", key=f"del_{job['job_id']}", type="primary"):
@@ -158,8 +159,9 @@ def render_user_management(user):
                                 edit_station = st.text_input("Primary Station", value=cur_station, key=f"e_st_{u['user_id']}")
                                 edit_can_vendor = st.checkbox("Can Manage / Assign Vendors?", value=bool(u.get("can_manage_vendors")), key=f"e_v_{u['user_id']}")
                                 
-                                st.markdown("##### Assigned Workstations")
+                                st.markdown("##### Assigned Workstations & Permissions")
                                 e_mod_a = st.checkbox("📝 Sales & Intake (Module 1)", value=("MOD_A" in cur_perms), key=f"e_ma_{u['user_id']}")
+                                e_can_edit = st.checkbox("✏️ Allow Editing Existing Jobsheets", value=("CAN_EDIT_JOBS" in cur_perms), key=f"e_cej_{u['user_id']}")
                                 e_mod_b = st.checkbox("🎨 Design / Pre-Press (Module 2)", value=("MOD_B" in cur_perms), key=f"e_mb_{u['user_id']}")
                                 e_mod_c = st.checkbox("💳 Accounts & Advance (Module 3)", value=("MOD_C" in cur_perms), key=f"e_mc_{u['user_id']}")
                                 e_mod_d = st.checkbox("⚙️ Production Floor (Module 4)", value=("MOD_D" in cur_perms), key=f"e_md_{u['user_id']}")
@@ -174,6 +176,7 @@ def render_user_management(user):
                                 if st.button("Save Changes", key=f"btn_save_u_{u['user_id']}", type="primary", use_container_width=True):
                                     new_perms = []
                                     if e_mod_a: new_perms.append("MOD_A")
+                                    if e_can_edit: new_perms.append("CAN_EDIT_JOBS")
                                     if e_mod_b: new_perms.append("MOD_B")
                                     if e_mod_c: new_perms.append("MOD_C")
                                     if e_mod_d: new_perms.append("MOD_D")
@@ -246,6 +249,7 @@ def render_user_management(user):
             r1, r2 = st.columns(2)
             with r1:
                 mod_a = st.checkbox("📝 Sales & Intake (Module 1)")
+                can_edit_jobs = st.checkbox("✏️ Allow Editing Existing Jobsheets", help="Allows modifying existing jobsheet info and pricing.")
                 mod_b = st.checkbox("🎨 Design / Pre-Press (Module 2)")
                 mod_c = st.checkbox("💳 Accounts & Advance Clearance (Module 3)")
                 mod_d = st.checkbox("⚙️ Production Floor / Machine Operator (Module 4)", value=True)
@@ -267,6 +271,7 @@ def render_user_management(user):
                 else:
                     permissions = []
                     if mod_a: permissions.append("MOD_A")
+                    if can_edit_jobs: permissions.append("CAN_EDIT_JOBS")
                     if mod_b: permissions.append("MOD_B")
                     if mod_c: permissions.append("MOD_C")
                     if mod_d: permissions.append("MOD_D")

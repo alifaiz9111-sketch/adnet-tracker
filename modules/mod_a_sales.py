@@ -59,7 +59,10 @@ def render(user):
         f"Sales Representative: **{user['full_name']}** | Code: `{user.get('emp_code', 'N/A')}` | Role: `{user.get('account_type')}`"
     )
 
+    user_perms = user.get("permissions") or []
     is_management = user.get("account_type") in ["SUPER_ADMIN", "CEO", "MANAGER"]
+    can_edit_jobsheets = is_management or ("CAN_EDIT_JOBS" in user_perms)
+
     t_create, t_history = st.tabs(["➕ Create New Jobsheet", "📋 Order History & Modifications"])
 
     # --- TAB 1: CREATE NEW JOBSHEET ---
@@ -317,7 +320,6 @@ def render(user):
                 total_val = sum(float(it.get("amount", 0) or 0) for it in items)
 
                 with st.container(border=True):
-                    # Define 3 columns for every card
                     c1, c2, c3 = st.columns([2.5, 2, 1.5])
                     
                     with c1:
@@ -334,7 +336,6 @@ def render(user):
                     with c3:
                         is_del_req = (j.get("return_reason") or "").startswith("[DELETION_REQ]")
 
-                        # Status display
                         if is_del_req:
                             st.warning("⏳ Deletion Pending Approval")
                         elif j.get("is_returned"):
@@ -342,8 +343,8 @@ def render(user):
                         else:
                             st.info(f"Desk: {j.get('current_stage')}")
 
-                        # Action 1: Management-Only Edit
-                        if is_management:
+                        # Action 1: Edit Jobsheet (Management OR Authorized Sales Staff)
+                        if can_edit_jobsheets:
                             with st.popover("✏️ Edit Jobsheet", use_container_width=True):
                                 st.markdown(f"**Modify Job #{j.get('job_no')}**")
                                 ed_client = st.text_input("Client Name", value=j.get("client_name", ""), key=f"ed_cl_{j['job_id']}")
@@ -398,11 +399,17 @@ def render(user):
                                     else:
                                         st.error(f"Update failed: {upd_msg}")
 
-                        # Action 2: Sales-Only Deletion Request
-                        if not is_management and not is_del_req:
+                        # Action 2: Deletion Request (Visible if not already pending)
+                        if is_del_req:
+                            st.caption("Request is awaiting review in Executive Overview.")
+                        else:
                             with st.popover("🗑️ Request Deletion", use_container_width=True):
                                 st.caption("Submit deletion request to CEO / Admin for approval.")
-                                del_reason = st.text_input("Reason for Deletion *", placeholder="e.g. Client cancelled order", key=f"req_del_r_{j['job_id']}")
+                                del_reason = st.text_input(
+                                    "Reason for Deletion *", 
+                                    placeholder="e.g. Client cancelled order", 
+                                    key=f"req_del_r_{j['job_id']}"
+                                )
                                 if st.button("Submit Request", key=f"btn_req_del_{j['job_id']}", type="primary", use_container_width=True):
                                     if not del_reason.strip():
                                         st.error("Please provide a reason.")
