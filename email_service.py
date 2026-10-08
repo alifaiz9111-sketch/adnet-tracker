@@ -38,6 +38,7 @@ def send_ceo_daily_report():
     returned_jobs = [j for j in jobs if j.get("is_returned")]
     total_pipeline_val = sum(float(it.get("amount", 0) or 0) for it in items)
 
+    ret_color = "#d9534f" if len(returned_jobs) > 0 else "#28a745"
     now_str = datetime.now(IST).strftime("%d-%b-%Y %I:%M %p")
 
     # 2. Build HTML Email Body
@@ -69,7 +70,7 @@ def send_ceo_daily_report():
             </div>
             <div class="metric-box">
                 <div>QC Defect / Returns</div>
-                <div class="metric-val" style="color: {'#d9534f' if returned_jobs else '#28a745'};">{len(returned_jobs)}</div>
+                <div class="metric-val" style="color: {ret_color};">{len(returned_jobs)}</div>
             </div>
             <div class="metric-box">
                 <div>Settled Orders</div>
@@ -98,32 +99,3 @@ def send_ceo_daily_report():
                     <th>Order Taken By</th>
                     <th>Notes / Status</th>
                 </tr>
-            </thead>
-            <tbody>
-        """
-        for j in active_jobs[:30]:
-            ret_tag = f"<span class='badge-ret'>⚠️ RETURN: {j.get('return_reason', '')}</span>" if j.get("is_returned") else "Normal"
-            html_body += f"""
-                <tr>
-                    <td><strong>#{j.get('job_no')}</strong></td>
-                    <td>{j.get('client_name')}</td>
-                    <td><span class='badge-stage'>{j.get('current_stage')}</span></td>
-                    <td>{j.get('due_date')}</td>
-                    <td>{j.get('order_taken_by') or 'N/A'}</td>
-                    <td>{ret_tag}</td>
-                </tr>
-            """
-        html_body += """
-            </tbody>
-        </table>
-        """
-
-    html_body += """
-        <p style="margin-top: 25px; font-size: 11px; color: #888;">Report sent automatically by AdNet Operations ERP Portal.</p>
-    </body>
-    </html>
-    """
-
-    # 3. Deliver Email via SMTP
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"AdNet Floor Operations Summary — {datetime.now

@@ -219,6 +219,12 @@ def render(user):
 
                 ok, msg = create_job_sheet(header_payload, prepared_items)
                 if ok:
+                    try:
+                        from email_service import send_new_jobsheet_alert
+                        send_new_jobsheet_alert(header_payload, prepared_items)
+                    except Exception:
+                        pass
+
                     st.success(f"Job Sheet #{job_no} created successfully and routed to `{routed_desk}`!")
                     st.session_state.sales_items = [{
                         "item_name": "",
