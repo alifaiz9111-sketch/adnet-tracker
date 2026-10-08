@@ -1,20 +1,23 @@
-from datetime import date
+from datetime import date, datetime
 import streamlit as st
 from database import (
     create_job_sheet,
     get_job_items,
     get_next_job_no,
     get_user_created_jobs,
+    update_job_sheet_by_management,
 )
 
 
 def render(user):
     st.subheader("📝 Module 1: Order Intake & Commercial Jobsheet Creation")
     st.caption(
-        f"Sales Representative: **{user['full_name']}** | Code: `{user.get('emp_code', 'N/A')}`"
+        f"Sales Representative: **{user['full_name']}** | Code: `{user.get('emp_code', 'N/A')}` | Role: `{user.get('account_type')}`"
     )
 
-    t_create, t_history = st.tabs(["➕ Create New Jobsheet", "📋 My Intake Order History"])
+    is_management = user.get("account_type") in ["SUPER_ADMIN", "CEO", "MANAGER"]
+
+    t_create, t_history = st.tabs(["➕ Create New Jobsheet", "📋 Order History & Modifications"])
 
     # --- TAB 1: CREATE NEW JOBSHEET ---
     with t_create:
@@ -242,13 +245,12 @@ def render(user):
                 else:
                     st.error(f"Failed to create jobsheet: {msg}")
 
-    # --- TAB 2: MY INTAKE ORDER HISTORY ---
+    # --- TAB 2: ORDER HISTORY & MANAGEMENT EDIT ---
     with t_history:
-        is_admin = user.get("account_type") in ["SUPER_ADMIN", "CEO", "MANAGER"]
-        my_jobs = get_user_created_jobs(user["full_name"], is_management=is_admin)
+        my_jobs = get_user_created_jobs(user["full_name"], is_management=is_management)
 
         if not my_jobs:
-            st.info("No orders found recorded by your desk.")
+            st.info("No orders found recorded.")
         else:
             for j in my_jobs:
                 items = get_job_items(j["job_id"])
@@ -260,12 +262,69 @@ def render(user):
                         st.markdown(f"**Job #{j.get('job_no')} — {j.get('client_name')}**")
                         st.caption(f"Contact: `{j.get('contact_person') or 'N/A'}` | 📱 `{j.get('contact_phone') or 'N/A'}`")
                         st.caption(f"Due: `{j.get('due_date')}` | Stage: `{j.get('current_stage')}`")
+                        st.caption(f"Created by: `{j.get('order_taken_by', 'N/A')}`")
                     with c2:
                         st.markdown(f"**Value:** ₹ {total_val:,.2f}")
                         for it in items:
-                            st.caption(f"• {it.get('item_name')} ({it.get('quantity')} {it.get('unit')})")
+                            st.caption(f"• {it.get('item_name')} ({it.get('quantity')} {it.get('unit')}) — ₹{float(it.get('amount', 0)):,.2f}")
                     with c3:
                         if j.get("is_returned"):
                             st.error(f"⚠️ Return: {j.get('return_reason')}")
                         else:
                             st.info(f"Desk: {j.get('current_stage')}")
+
+                        # Management-only modification controls
+                        if is_management:
+                            with st.popover("✏️ Edit Jobsheet", use_container_width=True):
+                                st.markdown(f"**Modify Job #{j.get('job_no')}**")
+                                ed_client = st.text_input("Client Name", value=j.get("client_name", ""), key=f"ed_cl_{j['job_id']}")
+                                ed_contact = st.text_input("Contact Person", value=j.get("contact_person", ""), key=f"ed_cp_{j['job_id']}")
+                                ed_phone = st.text_input("Contact Phone", value=j.get("contact_phone", ""), key=f"ed_ph_{j['job_id']}")
+
+                                cur_due = date.today()
+                                if j.get("due_date"):
+                                    try:
+                                        cur_due = datetime.strptime(str(j.get("due_date")), "%Y-%m-%d").date()
+                                    except Exception:
+                                        cur_due = date.today()
+                                ed_due = st.date_input("Target Due Date", value=cur_due, key=f"ed_due_{j['job_id']}")
+
+                                stage_list = ["DESIGN", "PAYMENT", "PRODUCTION", "QC", "DISPATCH", "BILLING", "SETTLED"]
+                                cur_st_idx = stage_list.index(j.get("current_stage")) if j.get("current_stage") in stage_list else 0
+                                ed_stage = st.selectbox("Stage Desk", stage_list, index=cur_st_idx, key=f"ed_stg_{j['job_id']}")
+
+                                st.markdown("---")
+                                st.markdown("##### Line Items")
+                                edited_items = []
+                                for idx, it in enumerate(items):
+                                    st.caption(f"Item #{idx+1}")
+                                    ei_name = st.text_input("Item Name", value=it.get("item_name", ""), key=f"ei_nm_{j['job_id']}_{idx}")
+                                    ei_spec = st.text_input("Specs / Dimensions", value=it.get("specifications", ""), key=f"ei_sp_{j['job_id']}_{idx}")
+                                    ei_qty = st.number_input("Qty", value=float(it.get("quantity", 1)), min_value=0.01, step=1.0, key=f"ei_q_{j['job_id']}_{idx}")
+                                    ei_rate = st.number_input("Rate (₹)", value=float(it.get("rate", 0)), min_value=0.0, step=10.0, key=f"ei_r_{j['job_id']}_{idx}")
+                                    ei_amt = round(ei_qty * ei_rate, 2)
+                                    st.write(f"Line Total: **₹ {ei_amt:,.2f}**")
+                                    edited_items.append({
+                                        "item_name": ei_name.strip(),
+                                        "specifications": ei_spec.strip(),
+                                        "quantity": ei_qty,
+                                        "unit": it.get("unit", "Pcs"),
+                                        "rate": ei_rate,
+                                        "amount": ei_amt,
+                                        "delivery_address": it.get("delivery_address", "")
+                                    })
+
+                                if st.button("Save Changes", key=f"btn_save_job_{j['job_id']}", type="primary", use_container_width=True):
+                                    h_payload = {
+                                        "client_name": ed_client,
+                                        "contact_person": ed_contact,
+                                        "contact_phone": ed_phone,
+                                        "due_date": str(ed_due),
+                                        "current_stage": ed_stage
+                                    }
+                                    ok, upd_msg = update_job_sheet_by_management(j["job_id"], h_payload, edited_items)
+                                    if ok:
+                                        st.success("Jobsheet updated successfully.")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Update failed: {upd_msg}")

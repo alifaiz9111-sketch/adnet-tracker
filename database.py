@@ -304,3 +304,20 @@ def update_user_permissions(user_id, account_type, permissions, can_manage_vendo
         return True, "User permissions updated successfully."
     except Exception as e:
         return False, str(e)
+
+def update_job_sheet_by_management(job_id, header_payload, line_items):
+    """Allows Manager, CEO, and Admin to edit jobsheet header and line items."""
+    try:
+        # 1. Update jobs header
+        supabase.table("jobs").update(header_payload).eq("job_id", int(job_id)).execute()
+
+        # 2. Replace line items (delete old, insert new)
+        supabase.table("job_items").delete().eq("job_id", int(job_id)).execute()
+        for it in line_items:
+            it["job_id"] = int(job_id)
+        if line_items:
+            supabase.table("job_items").insert(line_items).execute()
+
+        return True, "Jobsheet updated successfully."
+    except Exception as e:
+        return False, str(e)
