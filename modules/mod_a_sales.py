@@ -8,6 +8,21 @@ from database import (
 )
 
 
+def calculate_item_amount(qty, rate, length, breadth, height):
+    """Calculates amount using dimensions (L x B x H or L x B) if entered, else qty * rate."""
+    if length > 0 and breadth > 0 and height > 0:
+        multiplier = length * breadth * height
+    elif length > 0 and breadth > 0:
+        multiplier = length * breadth
+    elif length > 0:
+        multiplier = length
+    else:
+        multiplier = 1.0
+
+    total = round(multiplier * qty * rate, 2)
+    return total, multiplier
+
+
 def render(user):
     st.subheader("📝 Module 1: Order Intake & Commercial Jobsheet Creation")
     st.caption(
@@ -35,7 +50,7 @@ def render(user):
                 "delivery_address": "",
             }]
         else:
-            # Clean any legacy "Mm" out of existing session items
+            # Clean any legacy units
             for itm in st.session_state.sales_items:
                 if itm.get("dim_unit") not in ["Inch", "Ft"]:
                     itm["dim_unit"] = "Inch"
@@ -111,15 +126,25 @@ def render(user):
                         key=f"item_rate_{idx}",
                     )
                 with r_c4:
-                    item["amount"] = round(item["quantity"] * item["rate"], 2)
-                    st.metric("Total Amount", f"₹ {item['amount']:,.2f}")
+                    calc_amt, multiplier = calculate_item_amount(
+                        item["quantity"],
+                        item["rate"],
+                        item.get("length", 0.0),
+                        item.get("breadth", 0.0),
+                        item.get("height", 0.0),
+                    )
+                    item["amount"] = calc_amt
+                    if multiplier > 1.0:
+                        st.metric("Total Amount", f"₹ {item['amount']:,.2f}", help=f"Dimension factor (L×B×H): {multiplier}")
+                    else:
+                        st.metric("Total Amount", f"₹ {item['amount']:,.2f}")
                 with r_c5:
                     if len(st.session_state.sales_items) > 1:
                         if st.button("🗑️", key=f"del_row_{idx}"):
                             rows_to_remove.append(idx)
 
-                # Row 2: Optional Sizes (Length, Breadth, Height & Unit) for specs only
-                st.caption("📐 **Optional Sizes / Dimensions** (For Design, Floor & Delivery reference only):")
+                # Row 2: Dimensions (Length, Breadth, Height & Unit)
+                st.caption("📐 **Sizes / Dimensions** (Calculates: L × B × H × Qty × Rate):")
                 s_c1, s_c2, s_c3, s_c4 = st.columns(4)
                 with s_c1:
                     item["length"] = st.number_input(
