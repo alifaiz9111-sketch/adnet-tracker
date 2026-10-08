@@ -399,3 +399,31 @@ def reject_job_to_sales(job_id, designer_name, reason):
         return True, "Spec issue flagged. Sales notified."
     except Exception as e:
         return False, str(e)
+
+def record_payment_and_release(job_id, user_name, advance_received, balance_remaining, payment_mode, ref_no, payment_date, notes, is_credit=False):
+    """Records advance/credit terms and releases job to PRODUCTION stage."""
+    try:
+        payment_status = "CREDIT_APPROVED" if is_credit else ("CLEARED" if balance_remaining <= 0 else "PARTIAL_ADVANCE")
+        
+        payload = {
+            "current_stage": "PRODUCTION",
+            "advance_received": float(advance_received),
+            "balance_amount": float(balance_remaining),
+            "payment_mode": payment_mode,
+            "payment_ref": ref_no.strip() if ref_no else None,
+            "payment_date": str(payment_date),
+            "payment_remarks": notes.strip() if notes else None,
+            "payment_status": payment_status,
+            "accounts_cleared_by": user_name,
+            "is_returned": False,
+            "return_reason": None
+        }
+        
+        supabase.table("jobs").update(payload).eq("job_id", int(job_id)).execute()
+        
+        audit_note = f"Released to PRODUCTION on Credit terms by {user_name}" if is_credit else f"Advance ₹{advance_received:,.2f} recorded via {payment_mode}. Balance: ₹{balance_remaining:,.2f} by {user_name}"
+        log_audit(0, "PAYMENT_CLEARED", f"Job #{job_id}: {audit_note}")
+        
+        return True, "Payment recorded. Job released to Production Floor!"
+    except Exception as e:
+        return False, str(e)

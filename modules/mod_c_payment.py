@@ -1,11 +1,15 @@
+from datetime import date, datetime
 import streamlit as st
-from database import supabase, get_job_items
+from database import supabase, get_job_items, record_payment_and_release
+
 
 def render(user):
     st.subheader("💳 Module 3: Advance Clearance & Accounts Desk")
-    st.caption(f"Operator: **{user['full_name']}** | Role: `{user.get('account_type')}`")
+    st.caption(
+        f"Accounts Officer: **{user['full_name']}** | Role: `{user.get('account_type')}`"
+    )
 
-    # Fetch jobs pending payment clearance
+    # 1. Fetch jobs currently queued for PAYMENT clearance
     try:
         res = (
             supabase.table("jobs")
@@ -14,55 +18,191 @@ def render(user):
             .order("job_id")
             .execute()
         )
-        jobs = res.data or []
+        payment_jobs = res.data or []
     except Exception as e:
-        st.error(f"Error fetching jobs: {e}")
+        st.error(f"Error fetching payment queue: {e}")
         return
 
-    if not jobs:
-        st.info("No jobs pending advance payment clearance.")
+    # Calculate Overview Metrics
+    total_queue_jobs = len(payment_jobs)
+    priority_count = 0
+    total_pipeline_val = 0.0
+
+    jobs_with_meta = []
+    for j in payment_jobs:
+        items = get_job_items(j["job_id"])
+        job_val = sum(float(it.get("amount", 0) or 0) for it in items)
+        total_pipeline_val += job_val
+
+        # Urgent / Priority assessment (overdue or due within 24h)
+        is_priority = False
+        if j.get("due_date"):
+            try:
+                due_d = datetime.strptime(str(j["due_date"]), "%Y-%m-%d").date()
+                if (due_d - date.today()).days <= 1:
+                    is_priority = True
+                    priority_count += 1
+            except Exception:
+                pass
+        
+        if j.get("is_returned"):
+            priority_count += 1
+
+        jobs_with_meta.append({
+            "job": j,
+            "items": items,
+            "total_val": job_val,
+            "is_priority": is_priority
+        })
+
+    # --- QUEUE STATUS & OVERVIEW CARD ---
+    with st.container(border=True):
+        st.markdown("#### 📊 Queue Status & Accounts Overview")
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Orders Pending Clearance", f"{total_queue_jobs} Orders")
+        m2.metric("Total Pending Pipeline Value", f"₹ {total_pipeline_val:,.2f}")
+        m3.metric("Priority / Flagged Jobs", f"{priority_count} Orders")
+
+    st.markdown("---")
+
+    if not payment_jobs:
+        st.success("✅ Accounts queue is clear! No orders pending advance or credit clearance.")
         return
 
-    for job in jobs:
-        items = get_job_items(job["job_id"])
-        total_val = sum(float(it.get("amount", 0) or 0) for it in items)
+    # --- SINGLE-LIST JOBS DISPLAY ---
+    for entry in jobs_with_meta:
+        job = entry["job"]
+        items = entry["items"]
+        total_order_val = entry["total_val"]
+        is_priority = entry["is_priority"]
+        job_id = job["job_id"]
 
         with st.container(border=True):
-            c1, c2, c3 = st.columns([2.5, 2.5, 2])
-            with c1:
-                st.markdown(f"### Job #{job.get('job_no')} - {job.get('client_name')}")
+            # 1. Job Commercial Header
+            h_col1, h_col2, h_col3 = st.columns([3, 2, 1.5])
+            with h_col1:
+                st.markdown(f"### Job #{job.get('job_no')} — {job.get('client_name')}")
                 st.caption(f"👤 Contact: `{job.get('contact_person') or 'N/A'}` | 📱 `{job.get('contact_phone') or 'N/A'}`")
-                st.caption(f"📅 Due Date: `{job.get('due_date')}` | Booked By: `{job.get('order_taken_by') or 'N/A'}`")
-            with c2:
-                st.markdown("##### 📦 Ordered Line Items")
-                for idx, it in enumerate(items, 1):
-                    st.caption(f"**{idx}. {it.get('item_name', 'Item')}** — {it.get('quantity')} {it.get('unit')} @ ₹{float(it.get('rate', 0)):,.2f}")
-            with c3:
-                st.metric("Total Order Value", f"₹ {total_val:,.2f}")
-                
-                with st.popover("💵 Record Payment & Clear"):
-                    st.markdown("#### Advance Clearance")
-                    adv_amount = st.number_input(
-                        "Amount Received (₹)", 
-                        min_value=0.0, 
-                        max_value=float(total_val) if total_val > 0 else 1000000.0, 
-                        value=float(total_val), 
-                        key=f"amt_{job['job_id']}"
+            with h_col2:
+                due_tag = f"📅 Due: **{job.get('due_date')}**"
+                if is_priority:
+                    st.error(f"🔥 **PRIORITY / URGENT** | {due_tag}")
+                else:
+                    st.info(f"⏳ Normal | {due_tag}")
+                st.caption(f"Booked by: **{job.get('order_taken_by') or 'N/A'}**")
+            with h_col3:
+                st.metric("Total Order Value", f"₹ {total_order_val:,.2f}")
+
+            if job.get("is_returned"):
+                st.warning(f"⚠️ Flagged Return: {job.get('return_reason')}")
+
+            # 2. Client Financial Terms
+            billing_type = job.get("billing_type", "NON_GST")
+            t_col1, t_col2 = st.columns([2, 4])
+            with t_col1:
+                term_mode = st.radio(
+                    "Client Financial Terms:",
+                    ["Advance Client (Upfront Required)", "Credit / Corporate Client (Pre-Approved Ledger)"],
+                    key=f"terms_{job_id}",
+                    index=0
+                )
+            with t_col2:
+                if "Advance Client" in term_mode:
+                    st.caption("ℹ️ **Standard Policy:** Minimum deposit / advance payment is required before production floor kicks off.")
+                else:
+                    st.caption("ℹ️ **Corporate Policy:** Pre-approved client running on credit terms. Job can proceed with zero upfront deposit.")
+
+            st.markdown("##### 📝 Ordered Line Items Summary")
+            for idx, it in enumerate(items, 1):
+                st.caption(f"• **{it.get('item_name')}** | Qty: {it.get('quantity')} {it.get('unit')} | Amount: ₹{float(it.get('amount', 0)):,.2f}")
+
+            st.markdown("---")
+
+            # 3. Payment Entry Inputs & Live Balance Calculator
+            st.markdown("##### 💵 Payment Entry & Commercial Clearance")
+            p_c1, p_c2, p_c3, p_c4 = st.columns(4)
+
+            with p_c1:
+                adv_amt = st.number_input(
+                    "Advance Amount Received (₹)",
+                    min_value=0.0,
+                    max_value=float(total_order_val),
+                    value=0.0,
+                    step=100.0,
+                    key=f"adv_{job_id}"
+                )
+
+            with p_c2:
+                pay_mode = st.selectbox(
+                    "Payment Mode *",
+                    ["UPI", "NEFT/RTGS", "Cheque", "Cash", "Bank Transfer"],
+                    key=f"mode_{job_id}"
+                )
+
+            with p_c3:
+                ref_no = st.text_input(
+                    "Transaction / Ref No. (Optional)",
+                    placeholder="e.g. UTR / Cheque / UPI Ref",
+                    key=f"ref_{job_id}"
+                )
+
+            with p_c4:
+                pay_date = st.date_input(
+                    "Payment Date",
+                    value=date.today(),
+                    key=f"pdate_{job_id}"
+                )
+
+            # Live Balance Computation
+            pending_balance = max(0.0, round(total_order_val - adv_amt, 2))
+            bal_col1, bal_col2 = st.columns([2, 4])
+            with bal_col1:
+                st.metric("Pending Balance to Collect", f"₹ {pending_balance:,.2f}")
+            with bal_col2:
+                notes = st.text_input(
+                    "Accounts Notes / Remarks (Optional)",
+                    placeholder="e.g. Cheque received subject to realization / 50% advance confirmed by accounts",
+                    key=f"notes_{job_id}"
+                )
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # 4. Routing Action Controls
+            b_c1, b_c2 = st.columns(2)
+            with b_c1:
+                if st.button("🚀 Clear & Release to Production", key=f"btn_rel_{job_id}", type="primary", use_container_width=True):
+                    ok, msg = record_payment_and_release(
+                        job_id=job_id,
+                        user_name=user["full_name"],
+                        advance_received=adv_amt,
+                        balance_remaining=pending_balance,
+                        payment_mode=pay_mode,
+                        ref_no=ref_no,
+                        payment_date=pay_date,
+                        notes=notes,
+                        is_credit=False
                     )
-                    mode = st.selectbox(
-                        "Payment Mode", 
-                        ["Bank Transfer / NEFT / IMPS", "UPI / QR", "Cheque", "Cash"], 
-                        key=f"mode_{job['job_id']}"
+                    if ok:
+                        st.success(f"Job #{job.get('job_no')} cleared and pushed to PRODUCTION!")
+                        st.rerun()
+                    else:
+                        st.error(f"Error updating payment: {msg}")
+
+            with b_c2:
+                if st.button("📑 Approve on Credit (Zero Advance)", key=f"btn_crd_{job_id}", use_container_width=True):
+                    ok, msg = record_payment_and_release(
+                        job_id=job_id,
+                        user_name=user["full_name"],
+                        advance_received=0.0,
+                        balance_remaining=total_order_val,
+                        payment_mode="CREDIT",
+                        ref_no="PRE_APPROVED_CREDIT",
+                        payment_date=date.today(),
+                        notes="Corporate credit pre-approved. Zero advance collected." if not notes else notes,
+                        is_credit=True
                     )
-                    notes = st.text_input("Transaction Ref / Notes", placeholder="e.g. UTR / Cheque No.", key=f"ref_{job['job_id']}")
-                    
-                    if st.button("Confirm Clearance & Push to Floor", key=f"btn_pay_{job['job_id']}", type="primary", use_container_width=True):
-                        try:
-                            supabase.table("jobs").update({
-                                "current_stage": "PRODUCTION",
-                                "is_returned": False
-                            }).eq("job_id", int(job["job_id"])).execute()
-                            st.success(f"Job #{job.get('job_no')} cleared and pushed to Production floor.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Failed to clear payment: {e}")
+                    if ok:
+                        st.info(f"Job #{job.get('job_no')} approved on credit and released to PRODUCTION!")
+                        st.rerun()
+                    else:
+                        st.error(f"Error releasing credit job: {msg}")
