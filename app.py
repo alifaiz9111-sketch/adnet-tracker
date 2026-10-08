@@ -64,8 +64,11 @@ def render_ceo_briefing_dialog(user):
 def main():
     # Login Screen
     if not st.session_state.authenticated:
-        st.markdown("<h2 style='text-align: center;'>🖨️ AdNet Operations & Floor Management</h2>", unsafe_allow_html=True)
-        st.caption("<p style='text-align: center;'>Secure Employee & Management Portal</p>", unsafe_allow_html=True)
+        _, logo_col, _ = st.columns([1, 1.2, 1])
+        with logo_col:
+            st.image("adnet-tracker/assets/logo.png", use_container_width=True)
+
+        st.caption("<p style='text-align: center;'>Login with ID - Password</p>", unsafe_allow_html=True)
 
         _, col, _ = st.columns([1, 1.5, 1])
         with col:
