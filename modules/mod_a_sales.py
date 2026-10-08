@@ -9,16 +9,12 @@ from database import (
 
 
 def calculate_item_amount(qty, rate, length, breadth, height):
-    """Calculates amount using dimensions (L x B x H or L x B) if entered, else qty * rate."""
-    if length > 0 and breadth > 0 and height > 0:
-        multiplier = length * breadth * height
-    elif length > 0 and breadth > 0:
-        multiplier = length * breadth
-    elif length > 0:
-        multiplier = length
-    else:
-        multiplier = 1.0
+    """Calculates amount strictly as L x B x H x Qty x Rate."""
+    l_val = length if length > 0 else 1.0
+    b_val = breadth if breadth > 0 else 1.0
+    h_val = height if height > 0 else 1.0
 
+    multiplier = l_val * b_val * h_val
     total = round(multiplier * qty * rate, 2)
     return total, multiplier
 
@@ -35,22 +31,21 @@ def render(user):
     with t_create:
         suggested_no = get_next_job_no()
 
-        # Initialize dynamic item rows in session state
+        # Initialize dynamic item rows with required defaults
         if "sales_items" not in st.session_state:
             st.session_state.sales_items = [{
                 "item_name": "",
-                "length": 0.0,
-                "breadth": 0.0,
-                "height": 0.0,
+                "length": 1.0,
+                "breadth": 1.0,
+                "height": 1.0,
                 "dim_unit": "Inch",
-                "quantity": 1.0,
+                "quantity": 0.0,
                 "rate": 0.0,
                 "amount": 0.0,
                 "specifications": "",
                 "delivery_address": "",
             }]
         else:
-            # Clean any legacy units
             for itm in st.session_state.sales_items:
                 if itm.get("dim_unit") not in ["Inch", "Ft"]:
                     itm["dim_unit"] = "Inch"
@@ -85,11 +80,11 @@ def render(user):
             if st.button("➕ Add Item Row", use_container_width=True):
                 st.session_state.sales_items.append({
                     "item_name": "",
-                    "length": 0.0,
-                    "breadth": 0.0,
-                    "height": 0.0,
+                    "length": 1.0,
+                    "breadth": 1.0,
+                    "height": 1.0,
                     "dim_unit": "Inch",
-                    "quantity": 1.0,
+                    "quantity": 0.0,
                     "rate": 0.0,
                     "amount": 0.0,
                     "specifications": "",
@@ -112,8 +107,8 @@ def render(user):
                 with r_c2:
                     item["quantity"] = st.number_input(
                         "Quantity",
-                        min_value=0.01,
-                        value=float(item.get("quantity", 1.0)),
+                        min_value=0.0,
+                        value=float(item.get("quantity", 0.0)),
                         step=1.0,
                         key=f"item_qty_{idx}",
                     )
@@ -129,28 +124,25 @@ def render(user):
                     calc_amt, multiplier = calculate_item_amount(
                         item["quantity"],
                         item["rate"],
-                        item.get("length", 0.0),
-                        item.get("breadth", 0.0),
-                        item.get("height", 0.0),
+                        item.get("length", 1.0),
+                        item.get("breadth", 1.0),
+                        item.get("height", 1.0),
                     )
                     item["amount"] = calc_amt
-                    if multiplier > 1.0:
-                        st.metric("Total Amount", f"₹ {item['amount']:,.2f}", help=f"Dimension factor (L×B×H): {multiplier}")
-                    else:
-                        st.metric("Total Amount", f"₹ {item['amount']:,.2f}")
+                    st.metric("Total Amount", f"₹ {item['amount']:,.2f}")
                 with r_c5:
                     if len(st.session_state.sales_items) > 1:
                         if st.button("🗑️", key=f"del_row_{idx}"):
                             rows_to_remove.append(idx)
 
                 # Row 2: Dimensions (Length, Breadth, Height & Unit)
-                st.caption("📐 **Sizes / Dimensions** (Calculates: L × B × H × Qty × Rate):")
+                st.caption("📐 **Sizes / Dimensions** (Default: 1 × 1 × 1):")
                 s_c1, s_c2, s_c3, s_c4 = st.columns(4)
                 with s_c1:
                     item["length"] = st.number_input(
                         "Length (L)",
                         min_value=0.0,
-                        value=float(item.get("length", 0.0)),
+                        value=float(item.get("length", 1.0)),
                         step=1.0,
                         key=f"item_len_{idx}",
                     )
@@ -158,7 +150,7 @@ def render(user):
                     item["breadth"] = st.number_input(
                         "Breadth / Width (B)",
                         min_value=0.0,
-                        value=float(item.get("breadth", 0.0)),
+                        value=float(item.get("breadth", 1.0)),
                         step=1.0,
                         key=f"item_brd_{idx}",
                     )
@@ -166,7 +158,7 @@ def render(user):
                     item["height"] = st.number_input(
                         "Height / Depth (H)",
                         min_value=0.0,
-                        value=float(item.get("height", 0.0)),
+                        value=float(item.get("height", 1.0)),
                         step=0.5,
                         key=f"item_hgt_{idx}",
                     )
@@ -230,15 +222,7 @@ def render(user):
                 # Prepare items with consolidated size specs
                 prepared_items = []
                 for it in st.session_state.sales_items:
-                    size_parts = []
-                    if it.get("length", 0) > 0:
-                        size_parts.append(f"L: {it['length']}")
-                    if it.get("breadth", 0) > 0:
-                        size_parts.append(f"B: {it['breadth']}")
-                    if it.get("height", 0) > 0:
-                        size_parts.append(f"H: {it['height']}")
-
-                    size_str = f"Size: {' x '.join(size_parts)} {it.get('dim_unit', 'Inch')}" if size_parts else ""
+                    size_str = f"Size: {it.get('length', 1.0)} x {it.get('breadth', 1.0)} x {it.get('height', 1.0)} {it.get('dim_unit', 'Inch')}"
                     
                     full_spec = it.get("specifications", "").strip()
                     if size_str:
@@ -259,11 +243,11 @@ def render(user):
                     st.success(f"Job Sheet #{job_no} created successfully and routed to `{routed_desk}`!")
                     st.session_state.sales_items = [{
                         "item_name": "",
-                        "length": 0.0,
-                        "breadth": 0.0,
-                        "height": 0.0,
+                        "length": 1.0,
+                        "breadth": 1.0,
+                        "height": 1.0,
                         "dim_unit": "Inch",
-                        "quantity": 1.0,
+                        "quantity": 0.0,
                         "rate": 0.0,
                         "amount": 0.0,
                         "specifications": "",
