@@ -1,3 +1,4 @@
+from database import authenticate_user, supabase, log_audit, update_user_password
 import os
 import streamlit as st
 import time
@@ -161,6 +162,26 @@ def main():
             selected_desk = st.radio("Navigate Station", list(menu_options.keys()))
 
         st.markdown("---")
+        with st.popover("🔑 Change Password", use_container_width=True):
+            st.markdown("#### Update Password / PIN")
+            old_p = st.text_input("Current Password *", type="password", key="chg_old_pwd").strip()
+            new_p = st.text_input("New Password *", type="password", key="chg_new_pwd").strip()
+            conf_p = st.text_input("Confirm New Password *", type="password", key="chg_conf_pwd").strip()
+
+            if st.button("Update Password", type="primary", use_container_width=True, key="btn_update_pwd"):
+                if not (old_p and new_p and conf_p):
+                    st.error("Please fill in all password fields.")
+                elif new_p != conf_p:
+                    st.error("New password and confirmation do not match.")
+                elif len(new_p) < 4:
+                    st.error("Password must be at least 4 characters long.")
+                else:
+                    ok, msg = update_user_password(current_user["user_id"], old_p, new_p)
+                    if ok:
+                        st.success(msg)
+                    else:
+                        st.error(msg)
+
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.authenticated = False
             st.session_state.user = None

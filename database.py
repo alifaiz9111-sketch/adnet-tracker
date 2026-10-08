@@ -63,6 +63,30 @@ def authenticate_user(username, password):
     except Exception:
         return None
 
+def update_user_password(user_id, old_password, new_password):
+    """Allows an active user to change their password after verifying their old password."""
+    try:
+        # Verify old password
+        res = (
+            supabase.table("users")
+            .select("user_id")
+            .eq("user_id", int(user_id))
+            .eq("password_hash", old_password.strip())
+            .execute()
+        )
+        if not res.data:
+            return False, "Current password does not match."
+
+        # Update to new password
+        supabase.table("users").update({
+            "password_hash": new_password.strip()
+        }).eq("user_id", int(user_id)).execute()
+
+        log_audit(user_id, "PASSWORD_CHANGED", "User successfully changed their password.")
+        return True, "Password updated successfully!"
+    except Exception as e:
+        return False, str(e)
+
 
 # --- USER & VENDOR MANAGEMENT ---
 
