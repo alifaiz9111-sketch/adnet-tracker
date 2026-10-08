@@ -321,3 +321,26 @@ def update_job_sheet_by_management(job_id, header_payload, line_items):
         return True, "Jobsheet updated successfully."
     except Exception as e:
         return False, str(e)
+
+def request_job_deletion(job_id, requested_by, reason):
+    """Marks a jobsheet with a deletion request pending CEO/Admin review."""
+    try:
+        supabase.table("jobs").update({
+            "is_returned": True,
+            "return_reason": f"[DELETION_REQ] By {requested_by}: {reason.strip()}"
+        }).eq("job_id", int(job_id)).execute()
+        return True, "Deletion request submitted to CEO & Admin."
+    except Exception as e:
+        return False, str(e)
+
+
+def reject_job_deletion_request(job_id):
+    """Rejects the deletion request and restores normal job status."""
+    try:
+        supabase.table("jobs").update({
+            "is_returned": False,
+            "return_reason": None
+        }).eq("job_id", int(job_id)).execute()
+        return True, "Deletion request rejected. Job restored."
+    except Exception as e:
+        return False, str(e)

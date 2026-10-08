@@ -11,7 +11,8 @@ from database import (
     get_all_vendors,
     create_vendor,
     update_vendor_status,
-    delete_vendor
+    delete_vendor,
+    reject_job_deletion_request
 )
 
 def render_overview(user):
@@ -32,6 +33,37 @@ def render_overview(user):
     total_val = sum(float(it.get("amount", 0) or 0) for it in all_items)
 
     k1, k2, k3, k4 = st.columns(4)
+    # --- PENDING DELETION REQUESTS FOR CEO / ADMIN ---
+    del_requested_jobs = [
+        j for j in all_jobs 
+        if (j.get("return_reason") or "").startswith("[DELETION_REQ]")
+    ]
+
+    if del_requested_jobs:
+        st.markdown("---")
+        st.error(f"🚨 **{len(del_requested_jobs)} Jobsheet Deletion Request(s) Pending Approval**")
+        for dj in del_requested_jobs:
+            with st.container(border=True):
+                dc1, dc2, dc3 = st.columns([3, 2, 2])
+                with dc1:
+                    st.markdown(f"**Job #{dj.get('job_no')} — {dj.get('client_name')}**")
+                    clean_reason = dj.get("return_reason", "").replace("[DELETION_REQ]", "").strip()
+                    st.caption(f"📝 {clean_reason}")
+                with dc2:
+                    st.caption(f"Stage: `{dj.get('current_stage')}` | Due: `{dj.get('due_date')}`")
+                    st.caption(f"Booked by: `{dj.get('order_taken_by', 'N/A')}`")
+                with dc3:
+                    btn_a, btn_r = st.columns(2)
+                    with btn_a:
+                        if st.button("🗑️ Approve & Delete", key=f"appr_del_{dj['job_id']}", type="primary", use_container_width=True):
+                            delete_job_sheet(dj["job_id"])
+                            st.success(f"Job #{dj.get('job_no')} deleted permanently.")
+                            st.rerun()
+                    with btn_r:
+                        if st.button("❌ Reject", key=f"rej_del_{dj['job_id']}", use_container_width=True):
+                            reject_job_deletion_request(dj["job_id"])
+                            st.info(f"Deletion request rejected for Job #{dj.get('job_no')}.")
+                            st.rerun()
     with k1:
         st.metric("Total Jobs Logged", total_orders)
     with k2:

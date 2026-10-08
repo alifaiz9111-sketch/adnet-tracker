@@ -6,14 +6,14 @@ from database import (
     get_next_job_no,
     get_user_created_jobs,
     update_job_sheet_by_management,
+    request_job_deletion,
 )
 
 
 def _sync_commercials(idx, trigger_field):
-    """Auto-calculates the 3rd field whenever any of Quantity, Rate, or Amount changes."""
+    """Auto-calculates the 3rd field whenever Quantity, Rate, or Amount changes."""
     item = st.session_state.sales_items[idx]
 
-    # Pull current widget values
     qty = float(st.session_state.get(f"item_qty_{idx}", item["quantity"]))
     rate = float(st.session_state.get(f"item_rate_{idx}", item["rate"]))
     amount = float(st.session_state.get(f"item_amt_{idx}", item["amount"]))
@@ -24,7 +24,6 @@ def _sync_commercials(idx, trigger_field):
     dim_factor = l_val * b_val * h_val
 
     if trigger_field in ["qty", "rate"]:
-        # If user changed Qty or Rate -> update Amount
         new_amt = round(dim_factor * qty * rate, 2)
         st.session_state[f"item_amt_{idx}"] = new_amt
         item["quantity"] = qty
@@ -32,7 +31,6 @@ def _sync_commercials(idx, trigger_field):
         item["amount"] = new_amt
 
     elif trigger_field == "amount":
-        # If user changed Amount -> derive Rate (or Qty if rate exists)
         item["amount"] = amount
         if qty > 0 and dim_factor > 0:
             new_rate = round(amount / (dim_factor * qty), 2)
@@ -144,7 +142,7 @@ def render(user):
                         if st.button("🗑️", key=f"del_row_{idx}"):
                             rows_to_remove.append(idx)
 
-                # Row 1: Dimensions (Default: 1 x 1 x 1)
+                # Dimensions
                 st.caption("📐 **Sizes / Dimensions** (Default: 1 × 1 × 1):")
                 s_c1, s_c2, s_c3, s_c4 = st.columns(4)
                 with s_c1:
@@ -188,7 +186,7 @@ def render(user):
                         key=f"item_dunit_{idx}",
                     )
 
-                # Row 2: 3 Linked Commercial Boxes (Qty, Rate, Total Amount)
+                # Commercials: Fill any 2 to calculate the 3rd
                 st.caption("💰 **Commercials** (Fill any 2 fields to auto-calculate the 3rd):")
                 r_c1, r_c2, r_c3 = st.columns(3)
                 with r_c1:
@@ -222,7 +220,6 @@ def render(user):
                         args=(idx, "amount"),
                     )
 
-                # Row 3: Specifications and Delivery Address
                 d_c1, d_c2 = st.columns(2)
                 with d_c1:
                     item["specifications"] = st.text_input(
@@ -320,22 +317,32 @@ def render(user):
                 total_val = sum(float(it.get("amount", 0) or 0) for it in items)
 
                 with st.container(border=True):
+                    # Define 3 columns for every card
                     c1, c2, c3 = st.columns([2.5, 2, 1.5])
+                    
                     with c1:
                         st.markdown(f"**Job #{j.get('job_no')} — {j.get('client_name')}**")
                         st.caption(f"Contact: `{j.get('contact_person') or 'N/A'}` | 📱 `{j.get('contact_phone') or 'N/A'}`")
                         st.caption(f"Due: `{j.get('due_date')}` | Stage: `{j.get('current_stage')}`")
                         st.caption(f"Created by: `{j.get('order_taken_by', 'N/A')}`")
+                    
                     with c2:
                         st.markdown(f"**Value:** ₹ {total_val:,.2f}")
                         for it in items:
                             st.caption(f"• {it.get('item_name')} ({it.get('quantity')} {it.get('unit')}) — ₹{float(it.get('amount', 0)):,.2f}")
+                    
                     with c3:
-                        if j.get("is_returned"):
+                        is_del_req = (j.get("return_reason") or "").startswith("[DELETION_REQ]")
+
+                        # Status display
+                        if is_del_req:
+                            st.warning("⏳ Deletion Pending Approval")
+                        elif j.get("is_returned"):
                             st.error(f"⚠️ Return: {j.get('return_reason')}")
                         else:
                             st.info(f"Desk: {j.get('current_stage')}")
 
+                        # Action 1: Management-Only Edit
                         if is_management:
                             with st.popover("✏️ Edit Jobsheet", use_container_width=True):
                                 st.markdown(f"**Modify Job #{j.get('job_no')}**")
@@ -390,3 +397,19 @@ def render(user):
                                         st.rerun()
                                     else:
                                         st.error(f"Update failed: {upd_msg}")
+
+                        # Action 2: Sales-Only Deletion Request
+                        if not is_management and not is_del_req:
+                            with st.popover("🗑️ Request Deletion", use_container_width=True):
+                                st.caption("Submit deletion request to CEO / Admin for approval.")
+                                del_reason = st.text_input("Reason for Deletion *", placeholder="e.g. Client cancelled order", key=f"req_del_r_{j['job_id']}")
+                                if st.button("Submit Request", key=f"btn_req_del_{j['job_id']}", type="primary", use_container_width=True):
+                                    if not del_reason.strip():
+                                        st.error("Please provide a reason.")
+                                    else:
+                                        ok, msg = request_job_deletion(j["job_id"], user["full_name"], del_reason)
+                                        if ok:
+                                            st.success(msg)
+                                            st.rerun()
+                                        else:
+                                            st.error(msg)
