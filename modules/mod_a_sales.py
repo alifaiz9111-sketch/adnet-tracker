@@ -34,6 +34,11 @@ def render(user):
                 "specifications": "",
                 "delivery_address": "",
             }]
+        else:
+            # Clean any legacy "Mm" out of existing session items
+            for itm in st.session_state.sales_items:
+                if itm.get("dim_unit") not in ["Inch", "Ft"]:
+                    itm["dim_unit"] = "Inch"
 
         with st.container(border=True):
             st.markdown("#### 1. Client & Commercial Header")
