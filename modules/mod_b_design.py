@@ -25,9 +25,10 @@ def render(user):
         st.info("No jobs pending design or pre-press proofs.")
         return
 
+    is_privileged = user.get("account_type") in ["SUPER_ADMIN", "CEO"]
+
     for job in jobs:
         items = get_job_items(job["job_id"])
-        total_val = sum(float(it.get("amount", 0) or 0) for it in items)
 
         with st.container(border=True):
             c1, c2, c3 = st.columns([2.5, 2.5, 2])
@@ -52,7 +53,9 @@ def render(user):
                     if it.get("specifications"):
                         st.caption(f"&nbsp;&nbsp;📐 Specs: {it.get('specifications')}")
             with c3:
-                st.metric("Total Order Value", f"₹ {total_val:,.2f}")
+                if is_privileged:
+                    total_val = sum(float(it.get("amount", 0) or 0) for it in items)
+                    st.metric("Total Order Value", f"₹ {total_val:,.2f}")
 
                 if st.button(
                     "Approved",
