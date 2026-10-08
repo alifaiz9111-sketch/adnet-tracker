@@ -344,3 +344,32 @@ def reject_job_deletion_request(job_id):
         return True, "Deletion request rejected. Job restored."
     except Exception as e:
         return False, str(e)
+
+def get_all_designers():
+    """Fetches all active users who have permissions for MOD_B (Design Desk)."""
+    try:
+        res = supabase.table("users").select("user_id, full_name, username").eq("is_active", True).execute()
+        users = res.data or []
+        # Filter users who have MOD_B in permissions or are ADMIN/CEO
+        designers = []
+        for u in users:
+            # Re-fetch full user row to read permissions array reliably
+            u_row = supabase.table("users").select("*").eq("user_id", u["user_id"]).single().execute().data
+            perms = u_row.get("permissions") or []
+            if "MOD_B" in perms or u_row.get("account_type") in ["SUPER_ADMIN", "CEO"]:
+                designers.append(u_row)
+        return designers
+    except Exception:
+        return []
+
+
+def claim_design_job(job_id, designer_name):
+    """Allows a designer to claim an unassigned open pool job."""
+    try:
+        supabase.table("jobs").update({
+            "assigned_designer": designer_name
+        }).eq("job_id", int(job_id)).execute()
+        log_audit(0, "DESIGN_CLAIMED", f"Job #{job_id} claimed by designer {designer_name}")
+        return True, "Job successfully claimed!"
+    except Exception as e:
+        return False, str(e)

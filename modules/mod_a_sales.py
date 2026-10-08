@@ -7,13 +7,12 @@ from database import (
     get_user_created_jobs,
     update_job_sheet_by_management,
     request_job_deletion,
+    get_all_designers,
 )
 
 
 def _sync_commercials(idx, trigger_field):
-    """Auto-calculates the 3rd field whenever Quantity, Rate, or Amount changes."""
     item = st.session_state.sales_items[idx]
-
     qty = float(st.session_state.get(f"item_qty_{idx}", item["quantity"]))
     rate = float(st.session_state.get(f"item_rate_{idx}", item["rate"]))
     amount = float(st.session_state.get(f"item_amt_{idx}", item["amount"]))
@@ -45,7 +44,6 @@ def _sync_commercials(idx, trigger_field):
 
 
 def _recalc_on_dim_change(idx):
-    """Recalculates amount if dimensions are modified."""
     item = st.session_state.sales_items[idx]
     item["length"] = float(st.session_state.get(f"item_len_{idx}", item["length"]))
     item["breadth"] = float(st.session_state.get(f"item_brd_{idx}", item["breadth"]))
@@ -108,6 +106,16 @@ def render(user):
                     }.get(x, x),
                     key="s_route",
                 )
+
+            # Designer Assignment option if routed to DESIGN
+            target_designer = "OPEN_POOL"
+            if routed_desk == "DESIGN":
+                designers_list = get_all_designers()
+                des_options = ["📢 Broadcast to All Designers (Open Claim)"] + [f"{d['full_name']} (@{d['username']})" for d in designers_list]
+                chosen = st.selectbox("Assign Designer *", options=des_options, key="s_des_choice")
+                if "📢" not in chosen:
+                    # extract full name
+                    target_designer = chosen.split(" (@")[0].strip()
 
         st.markdown("---")
         st.markdown("#### 2. Commercial Line Items & Specs")
@@ -189,7 +197,6 @@ def render(user):
                         key=f"item_dunit_{idx}",
                     )
 
-                # Commercials: Fill any 2 to calculate the 3rd
                 st.caption("💰 **Commercials** (Fill any 2 fields to auto-calculate the 3rd):")
                 r_c1, r_c2, r_c3 = st.columns(3)
                 with r_c1:
@@ -261,6 +268,7 @@ def render(user):
                     "due_date": str(due_date),
                     "order_taken_by": user["full_name"],
                     "current_stage": routed_desk,
+                    "assigned_designer": target_designer if routed_desk == "DESIGN" else None,
                     "is_returned": False,
                     "billing_type": "NON_GST",
                     "is_billed": False,
@@ -291,7 +299,8 @@ def render(user):
                     except Exception:
                         pass
 
-                    st.success(f"Job Sheet #{job_no} created successfully and routed to `{routed_desk}`!")
+                    des_msg = f" (Assigned to: `{target_designer}`)" if routed_desk == "DESIGN" else ""
+                    st.success(f"Job Sheet #{job_no} created successfully and routed to `{routed_desk}`{des_msg}!")
                     st.session_state.sales_items = [{
                         "item_name": "",
                         "length": 1.0,
@@ -321,18 +330,16 @@ def render(user):
 
                 with st.container(border=True):
                     c1, c2, c3 = st.columns([2.5, 2, 1.5])
-                    
                     with c1:
                         st.markdown(f"**Job #{j.get('job_no')} — {j.get('client_name')}**")
                         st.caption(f"Contact: `{j.get('contact_person') or 'N/A'}` | 📱 `{j.get('contact_phone') or 'N/A'}`")
                         st.caption(f"Due: `{j.get('due_date')}` | Stage: `{j.get('current_stage')}`")
-                        st.caption(f"Created by: `{j.get('order_taken_by', 'N/A')}`")
-                    
+                        des_label = j.get("assigned_designer") or "None"
+                        st.caption(f"Designer: `{des_label}` | Booked by: `{j.get('order_taken_by', 'N/A')}`")
                     with c2:
                         st.markdown(f"**Value:** ₹ {total_val:,.2f}")
                         for it in items:
                             st.caption(f"• {it.get('item_name')} ({it.get('quantity')} {it.get('unit')}) — ₹{float(it.get('amount', 0)):,.2f}")
-                    
                     with c3:
                         is_del_req = (j.get("return_reason") or "").startswith("[DELETION_REQ]")
 
@@ -343,7 +350,6 @@ def render(user):
                         else:
                             st.info(f"Desk: {j.get('current_stage')}")
 
-                        # Action 1: Edit Jobsheet (Management OR Authorized Sales Staff)
                         if can_edit_jobsheets:
                             with st.popover("✏️ Edit Jobsheet", use_container_width=True):
                                 st.markdown(f"**Modify Job #{j.get('job_no')}**")
@@ -362,6 +368,13 @@ def render(user):
                                 stage_list = ["DESIGN", "PAYMENT", "PRODUCTION", "QC", "DISPATCH", "BILLING", "SETTLED"]
                                 cur_st_idx = stage_list.index(j.get("current_stage")) if j.get("current_stage") in stage_list else 0
                                 ed_stage = st.selectbox("Stage Desk", stage_list, index=cur_st_idx, key=f"ed_stg_{j['job_id']}")
+
+                                # Option to reassign designer
+                                designers_all = get_all_designers()
+                                d_names = ["OPEN_POOL"] + [d["full_name"] for d in designers_all]
+                                cur_des = j.get("assigned_designer") or "OPEN_POOL"
+                                d_idx = d_names.index(cur_des) if cur_des in d_names else 0
+                                ed_designer = st.selectbox("Assigned Designer", options=d_names, index=d_idx, key=f"ed_des_{j['job_id']}")
 
                                 st.markdown("---")
                                 st.markdown("##### Line Items")
@@ -390,7 +403,8 @@ def render(user):
                                         "contact_person": ed_contact,
                                         "contact_phone": ed_phone,
                                         "due_date": str(ed_due),
-                                        "current_stage": ed_stage
+                                        "current_stage": ed_stage,
+                                        "assigned_designer": ed_designer,
                                     }
                                     ok, upd_msg = update_job_sheet_by_management(j["job_id"], h_payload, edited_items)
                                     if ok:
@@ -399,7 +413,6 @@ def render(user):
                                     else:
                                         st.error(f"Update failed: {upd_msg}")
 
-                        # Action 2: Deletion Request (Visible if not already pending)
                         if is_del_req:
                             st.caption("Request is awaiting review in Executive Overview.")
                         else:
