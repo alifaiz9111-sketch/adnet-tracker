@@ -24,16 +24,11 @@ def render(user):
 
     is_privileged = user.get("account_type") in ["SUPER_ADMIN", "CEO"]
 
-    # --- TASK SEGREGATION QUEUES ---
+    # --- MUTUALLY EXCLUSIVE TASK QUEUES ---
+    # 1. Flagged or QC returns
     qc_returns = [j for j in all_design_jobs if j.get("is_returned")]
-    
-    my_active = [
-        j for j in all_design_jobs 
-        if not j.get("is_returned") and (
-            is_privileged or j.get("assigned_designer") == user["full_name"]
-        )
-    ]
-    
+
+    # 2. Open broadcast jobs (not claimed by anyone)
     open_pool = [
         j for j in all_design_jobs 
         if not j.get("is_returned") and (
@@ -41,8 +36,22 @@ def render(user):
         )
     ]
 
+    # 3. Active assigned jobs:
+    # For Admin/CEO: show all assigned jobs that are NOT open pool and NOT returned
+    # For regular designer: show only jobs specifically assigned to them
+    if is_privileged:
+        my_active = [
+            j for j in all_design_jobs 
+            if not j.get("is_returned") and j.get("assigned_designer") and j.get("assigned_designer") != "OPEN_POOL"
+        ]
+    else:
+        my_active = [
+            j for j in all_design_jobs 
+            if not j.get("is_returned") and j.get("assigned_designer") == user["full_name"]
+        ]
+
     t_active, t_pool, t_returns = st.tabs([
-        f"📌 My Active Desk ({len(my_active)})",
+        f"📌 Active Assigned Desk ({len(my_active)})",
         f"📢 Open Claim Pool ({len(open_pool)})",
         f"🚨 QC Returns / Corrections ({len(qc_returns)})"
     ])
@@ -53,7 +62,6 @@ def render(user):
         is_open = not assigned_to or assigned_to == "OPEN_POOL"
         is_mine = assigned_to == user["full_name"]
 
-        # Urgent badge check (due within 24 hours or overdue)
         is_urgent = False
         if job.get("due_date"):
             try:
@@ -98,7 +106,6 @@ def render(user):
                         st.code(raw_spec, language="markdown")
 
             with c_actions:
-                # Commercial Masking: Price ONLY visible to Super Admin / CEO
                 if is_privileged:
                     total_val = sum(float(it.get("amount", 0) or 0) for it in items)
                     st.metric("Total Order Value", f"₹ {total_val:,.2f}")
@@ -107,9 +114,9 @@ def render(user):
 
                 st.markdown("<br>", unsafe_allow_html=True)
 
-                # 3. Action & Routing Controls
+                # 3. Action & Routing Controls with Unique Keys per Tab Mode
                 if is_open and not is_privileged:
-                    if st.button("✋ Claim Job", key=f"btn_claim_{job['job_id']}", type="primary", use_container_width=True):
+                    if st.button("✋ Claim Job", key=f"btn_claim_{mode}_{job['job_id']}", type="primary", use_container_width=True):
                         ok, msg = claim_design_job(job["job_id"], user["full_name"])
                         if ok:
                             st.success("Job locked to your desk.")
@@ -117,9 +124,9 @@ def render(user):
                         else:
                             st.error(msg)
                 
-                elif is_mine or is_privileged:
+                elif is_mine or is_privileged or mode == "return":
                     # Approved Button
-                    if st.button("✅ Approved", key=f"btn_app_{job['job_id']}", type="primary", use_container_width=True):
+                    if st.button("✅ Approved", key=f"btn_app_{mode}_{job['job_id']}", type="primary", use_container_width=True):
                         try:
                             update_data = {
                                 "current_stage": "PAYMENT",
@@ -138,8 +145,8 @@ def render(user):
                     # Flag Spec Issue Popover
                     with st.popover("⚠️ Flag Spec Issue", use_container_width=True):
                         st.caption("Send revision request back to Sales intake.")
-                        issue_note = st.text_input("Discrepancy / Clarification Details *", key=f"iss_{job['job_id']}")
-                        if st.button("Submit Issue to Sales", key=f"btn_flag_{job['job_id']}", type="secondary", use_container_width=True):
+                        issue_note = st.text_input("Discrepancy Details *", key=f"iss_{mode}_{job['job_id']}")
+                        if st.button("Submit Issue to Sales", key=f"btn_flag_{mode}_{job['job_id']}", type="secondary", use_container_width=True):
                             if not issue_note.strip():
                                 st.error("Please enter specific discrepancy details.")
                             else:
@@ -152,10 +159,10 @@ def render(user):
                 else:
                     st.caption(f"🔒 Locked to {assigned_to}")
 
-    # Render each tab queue
+    # Render tabs
     with t_active:
         if not my_active:
-            st.info("No active design jobs assigned to your desk.")
+            st.info("No active design jobs assigned.")
         else:
             for j in my_active:
                 render_job_card(j, mode="active")
