@@ -346,18 +346,30 @@ def reject_job_deletion_request(job_id):
         return False, str(e)
 
 def get_all_designers():
-    """Fetches all active users who have permissions for MOD_B (Design Desk)."""
+    """Fetches ONLY active staff members who are designated designers (have MOD_B permission). Excludes Admin and CEO accounts."""
     try:
-        res = supabase.table("users").select("user_id, full_name, username").eq("is_active", True).execute()
+        res = (
+            supabase.table("users")
+            .select("user_id, full_name, username, account_type, permissions")
+            .eq("is_active", True)
+            .execute()
+        )
         users = res.data or []
-        # Filter users who have MOD_B in permissions or are ADMIN/CEO
+
         designers = []
         for u in users:
-            # Re-fetch full user row to read permissions array reliably
-            u_row = supabase.table("users").select("*").eq("user_id", u["user_id"]).single().execute().data
-            perms = u_row.get("permissions") or []
-            if "MOD_B" in perms or u_row.get("account_type") in ["SUPER_ADMIN", "CEO"]:
-                designers.append(u_row)
+            perms = u.get("permissions") or []
+            role = u.get("account_type", "")
+            username = (u.get("username") or "").lower()
+
+            # Exclude root admin and CEO/Super Admin accounts
+            if role in ["SUPER_ADMIN", "CEO"] or username in ["admin"]:
+                continue
+
+            # Must have Module 2 (Design Desk) assigned
+            if "MOD_B" in perms:
+                designers.append(u)
+
         return designers
     except Exception:
         return []
