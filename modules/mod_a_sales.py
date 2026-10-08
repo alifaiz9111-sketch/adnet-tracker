@@ -95,47 +95,21 @@ def render(user):
         rows_to_remove = []
         for idx, item in enumerate(st.session_state.sales_items):
             with st.container(border=True):
-                # Row 1: Item Name, Quantity, Rate, Amount, Delete
-                r_c1, r_c2, r_c3, r_c4, r_c5 = st.columns([3, 1, 1.2, 1.5, 0.5])
-                with r_c1:
+                # Header Row: Item Name & Delete Button
+                top_c1, top_c2 = st.columns([5.5, 0.5])
+                with top_c1:
                     item["item_name"] = st.text_input(
                         f"Item Name #{idx+1} *",
                         value=item.get("item_name", ""),
                         placeholder="e.g. Backlit Flex Signboard",
                         key=f"item_name_{idx}",
                     )
-                with r_c2:
-                    item["quantity"] = st.number_input(
-                        "Quantity",
-                        min_value=0.0,
-                        value=float(item.get("quantity", 0.0)),
-                        step=1.0,
-                        key=f"item_qty_{idx}",
-                    )
-                with r_c3:
-                    item["rate"] = st.number_input(
-                        "Rate (₹)",
-                        min_value=0.0,
-                        value=float(item.get("rate", 0.0)),
-                        step=10.0,
-                        key=f"item_rate_{idx}",
-                    )
-                with r_c4:
-                    calc_amt, multiplier = calculate_item_amount(
-                        item["quantity"],
-                        item["rate"],
-                        item.get("length", 1.0),
-                        item.get("breadth", 1.0),
-                        item.get("height", 1.0),
-                    )
-                    item["amount"] = calc_amt
-                    st.metric("Total Amount", f"₹ {item['amount']:,.2f}")
-                with r_c5:
+                with top_c2:
                     if len(st.session_state.sales_items) > 1:
                         if st.button("🗑️", key=f"del_row_{idx}"):
                             rows_to_remove.append(idx)
 
-                # Row 2: Dimensions (Length, Breadth, Height & Unit)
+                # Row 1: Dimensions (Length, Breadth, Height & Unit)
                 st.caption("📐 **Sizes / Dimensions** (Default: 1 × 1 × 1):")
                 s_c1, s_c2, s_c3, s_c4 = st.columns(4)
                 with s_c1:
@@ -172,6 +146,33 @@ def render(user):
                         index=u_idx,
                         key=f"item_dunit_{idx}",
                     )
+
+                # Row 2: Commercials (Quantity, Rate & Real-Time Amount)
+                r_c1, r_c2, r_c3 = st.columns([1.5, 1.5, 2])
+                with r_c1:
+                    item["quantity"] = st.number_input(
+                        "Quantity",
+                        min_value=0.0,
+                        value=float(item.get("quantity", 0.0)),
+                        step=1.0,
+                        key=f"item_qty_{idx}",
+                    )
+                with r_c2:
+                    item["rate"] = st.number_input(
+                        "Rate (₹)",
+                        min_value=0.0,
+                        value=float(item.get("rate", 0.0)),
+                        step=10.0,
+                        key=f"item_rate_{idx}",
+                    )
+                with r_c3:
+                    # Live calculation using freshly updated variables
+                    l_val = item["length"] if item["length"] > 0 else 1.0
+                    b_val = item["breadth"] if item["breadth"] > 0 else 1.0
+                    h_val = item["height"] if item["height"] > 0 else 1.0
+                    
+                    item["amount"] = round(l_val * b_val * h_val * item["quantity"] * item["rate"], 2)
+                    st.metric("Total Line Amount", f"₹ {item['amount']:,.2f}")
 
                 # Row 3: Specifications and Delivery Address
                 d_c1, d_c2 = st.columns(2)
