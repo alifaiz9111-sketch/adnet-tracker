@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import time
 from database import authenticate_user, supabase, log_audit
@@ -66,7 +67,11 @@ def main():
     if not st.session_state.authenticated:
         _, logo_col, _ = st.columns([1, 1.2, 1])
         with logo_col:
-            st.image("adnet-tracker/assets/logo.png", use_container_width=True)
+            logo_path = "assets/logo.png" if os.path.exists("assets/logo.png") else "adnet-tracker/assets/logo.png"
+            if os.path.exists(logo_path):
+                st.image(logo_path, use_container_width=True)
+            else:
+                st.markdown("<h2 style='text-align: center;'>🖨️ AdNet Operations & Floor Management</h2>", unsafe_allow_html=True)
 
         st.caption("<p style='text-align: center;'>Login with ID - Password</p>", unsafe_allow_html=True)
 
