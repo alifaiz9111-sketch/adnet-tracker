@@ -26,50 +26,6 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "user" not in st.session_state:
     st.session_state.user = None
-if "ceo_modal_seen" not in st.session_state:
-    st.session_state.ceo_modal_seen = False
-
-
-def render_ceo_briefing_dialog(user):
-    """Executive Morning Briefing Modal for Admin & CEO."""
-    @st.dialog("👑 Executive Morning Briefing")
-    def briefing():
-        st.markdown(f"### Welcome back, {user['full_name']}")
-        st.caption("Floor velocity and pipeline snapshot:")
-
-        try:
-            j_res = supabase.table("jobs").select("*").execute()
-            jobs = j_res.data or []
-            i_res = supabase.table("job_items").select("*").execute()
-            items = i_res.data or []
-        except Exception:
-            jobs, items = [], []
-
-        active = [j for j in jobs if j.get("current_stage") != "SETTLED"]
-        returned = [j for j in jobs if j.get("is_returned")]
-        val = sum(float(i.get("amount", 0) or 0) for i in items)
-
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Active Floor Orders", len(active))
-        c2.metric("QC Defect / Returns", len(returned))
-        c3.metric("Live Order Value", f"₹ {val:,.2f}")
-
-        st.markdown("---")
-        btn_c1, btn_c2 = st.columns(2)
-        with btn_c1:
-            if st.button("📧 Email Report to CEO", use_container_width=True):
-                from email_service import send_ceo_daily_report
-                ok, res_msg = send_ceo_daily_report()
-                if ok:
-                    st.success(res_msg)
-                else:
-                    st.error(res_msg)
-        with btn_c2:
-            if st.button("Enter Management Workspace", type="primary", use_container_width=True):
-                st.session_state.ceo_modal_seen = True
-                st.rerun()
-
-    briefing()
 
 
 def main():
@@ -116,10 +72,6 @@ def main():
     account_type = current_user.get("account_type", "STAFF")
     user_perms = current_user.get("permissions") or []
 
-    # CEO/Admin Briefing Modal Trigger
-    if account_type in ["SUPER_ADMIN", "CEO"] and not st.session_state.ceo_modal_seen:
-        render_ceo_briefing_dialog(current_user)
-
     # Sidebar Navigation
     with st.sidebar:
         st.markdown(f"### 👤 {current_user['full_name']}")
@@ -128,6 +80,21 @@ def main():
             st.caption(f"Station: `{current_user['primary_station']}`")
 
         st.markdown("---")
+
+        # --- BUTTON: MAIL TODAY'S JOBSHEET (ABOVE WORKSPACES) ---
+        if st.button("📧 Mail Today's Jobsheet", use_container_width=True, type="secondary"):
+            with st.spinner("Compiling and sending today's jobsheets..."):
+                try:
+                    from email_service import send_daily_jobsheet_digest
+                    recipient = current_user.get("email")
+                    ok, res_msg = send_daily_jobsheet_digest(recipient_email=recipient)
+                    if ok:
+                        st.toast(f"✅ {res_msg}", icon="📧")
+                    else:
+                        st.warning(res_msg)
+                except Exception as ex:
+                    st.error(f"Failed to send email: {ex}")
+
         st.markdown("### 📂 Workspaces")
 
         menu_options = {}
@@ -193,7 +160,6 @@ def main():
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.authenticated = False
             st.session_state.user = None
-            st.session_state.ceo_modal_seen = False
             st.rerun()
 
     # Render Screen
