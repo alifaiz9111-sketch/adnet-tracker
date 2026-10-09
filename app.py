@@ -161,7 +161,7 @@ def inject_preadmin_dark_css():
 
 
 def render_signin_window():
-    """Centered floating card login screen matching config.toml theme."""
+    """Centered floating card login screen matching JIDOX design reference."""
     st.markdown("""
         <style>
         /* Hide sidebar on login screen */
@@ -173,8 +173,8 @@ def render_signin_window():
             border: 1px solid rgba(255, 255, 255, 0.12) !important;
             border-radius: 12px !important;
             background-color: #161B22 !important;
-            padding: 30px 24px !important;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important;
+            padding: 34px 26px !important;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6) !important;
         }
         /* Custom Diamond Icon */
         .login-brand-box {
@@ -265,7 +265,7 @@ def render_signin_window():
             </div>
         """, unsafe_allow_html=True)
 
-        
+
 def main():
     inject_preadmin_dark_css()
 
@@ -276,10 +276,10 @@ def main():
 
     # --- LOGGED IN STATE ---
     current_user = st.session_state.user
-    account_type = current_user.get("account_type", "STAFF")
-    user_perms = current_user.get("permissions") or []
+    account_type = current_user.get("account_type", "STAFF")[cite: 20]
+    user_perms = current_user.get("permissions") or [][cite: 20]
 
-    p_counts = get_station_pending_counts()
+    p_counts = get_station_pending_counts()[cite: 20]
 
     # --- SIDEBAR (PREADMIN DARK STYLE) ---
     with st.sidebar:
@@ -296,15 +296,15 @@ def main():
         if st.button("✉️ Mail Today's Jobsheet", use_container_width=True):
             with st.spinner("Dispatching summary..."):
                 try:
-                    from email_service import send_daily_jobsheet_digest
-                    recipient = current_user.get("email")
-                    ok, res_msg = send_daily_jobsheet_digest(recipient_email=recipient)
+                    from email_service import send_daily_jobsheet_digest[cite: 20]
+                    recipient = current_user.get("email")[cite: 20]
+                    ok, res_msg = send_daily_jobsheet_digest(recipient_email=recipient)[cite: 20]
                     if ok:
-                        st.toast(f"✅ {res_msg}", icon="📧")
+                        st.toast(f"✅ {res_msg}", icon="📧")[cite: 20]
                     else:
-                        st.warning(res_msg)
+                        st.warning(res_msg)[cite: 20]
                 except Exception as ex:
-                    st.error(f"Failed to send email: {ex}")
+                    st.error(f"Failed to send email: {ex}")[cite: 20]
         st.markdown('</div>', unsafe_allow_html=True)
 
         menu_config = []
@@ -315,43 +315,102 @@ def main():
             return title
 
         # --- SECTION: MANAGEMENT ---
-        if account_type in ["SUPER_ADMIN", "CEO", "MANAGER"]:
+        if account_type in ["SUPER_ADMIN", "CEO", "MANAGER"]:[cite: 20]
             st.markdown('<div class="nav-category">MANAGEMENT</div>', unsafe_allow_html=True)
             
-            if account_type in ["SUPER_ADMIN", "CEO"]:
-                del_count = p_counts.get("DELETION_REQS", 0)
-                lbl_exec = make_station_label("👑 Executive Overview", del_count)
-                menu_config.append(("EXEC_OVERVIEW", lbl_exec, ceo_admin.render_overview))
-                menu_config.append(("EXEC_RBAC", "👥 Staff & RBAC Admin", ceo_admin.render_user_management))
+            if account_type in ["SUPER_ADMIN", "CEO"]:[cite: 20]
+                del_count = p_counts.get("DELETION_REQS", 0)[cite: 20]
+                lbl_exec = make_station_label("👑 Executive Overview", del_count)[cite: 20]
+                menu_config.append(("EXEC_OVERVIEW", lbl_exec, ceo_admin.render_overview))[cite: 20]
+                menu_config.append(("EXEC_RBAC", "👥 Staff & RBAC Admin", ceo_admin.render_user_management))[cite: 20]
 
-            menu_config.append(("MGR_TRACK", "🔍 Floor Track & Audit", manager_view.render))
+            menu_config.append(("MGR_TRACK", "🔍 Floor Track & Audit", manager_view.render))[cite: 20]
 
         # --- SECTION: OPERATIONS FLOOR ---
         st.markdown('<div class="nav-category">OPERATIONS</div>', unsafe_allow_html=True)
 
-        if "MOD_A" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
-            menu_config.append(("MOD_A", "📝 Order Intake (Sales)", mod_a_sales.render))
+        if "MOD_A" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:[cite: 20]
+            menu_config.append(("MOD_A", "📝 Order Intake (Sales)", mod_a_sales.render))[cite: 20]
 
-        if "MOD_B" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
-            c_b = p_counts.get("DESIGN", 0)
-            menu_config.append(("MOD_B", make_station_label("🎨 Design & Proofs", c_b), mod_b_design.render))
+        if "MOD_B" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:[cite: 20]
+            c_b = p_counts.get("DESIGN", 0)[cite: 20]
+            menu_config.append(("MOD_B", make_station_label("🎨 Design & Proofs", c_b), mod_b_design.render))[cite: 20]
 
-        if "MOD_C" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
-            c_c = p_counts.get("PAYMENT", 0)
-            menu_config.append(("MOD_C", make_station_label("💳 Accounts Clearance", c_c), mod_c_payment.render))
+        if "MOD_C" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:[cite: 20]
+            c_c = p_counts.get("PAYMENT", 0)[cite: 20]
+            menu_config.append(("MOD_C", make_station_label("💳 Accounts Clearance", c_c), mod_c_payment.render))[cite: 20]
 
-        if "MOD_D" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
-            c_d = p_counts.get("PRODUCTION", 0)
-            menu_config.append(("MOD_D", make_station_label("⚙️ Production Floor", c_d), mod_d_production.render))
+        if "MOD_D" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:[cite: 20]
+            c_d = p_counts.get("PRODUCTION", 0)[cite: 20]
+            menu_config.append(("MOD_D", make_station_label("⚙️ Production Floor", c_d), mod_d_production.render))[cite: 20]
 
-        if "MOD_E" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
-            c_e = p_counts.get("QC", 0)
-            menu_config.append(("MOD_E", make_station_label("🔍 Quality Check (QC)", c_e), mod_e_qc.render))
+        if "MOD_E" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:[cite: 20]
+            c_e = p_counts.get("QC", 0)[cite: 20]
+            menu_config.append(("MOD_E", make_station_label("🔍 Quality Check (QC)", c_e), mod_e_qc.render))[cite: 20]
 
-        if "MOD_F" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
-            c_f = p_counts.get("DISPATCH", 0)
-            menu_config.append(("MOD_F", make_station_label("🚚 Dispatch & Delivery", c_f), mod_f_dispatch.render))
+        if "MOD_F" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:[cite: 20]
+            c_f = p_counts.get("DISPATCH", 0)[cite: 20]
+            menu_config.append(("MOD_F", make_station_label("🚚 Dispatch & Delivery", c_f), mod_f_dispatch.render))[cite: 20]
 
-        if "MOD_G" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
-            c_g = p_counts.get("BILLING", 0)
-            menu_config.append(("MOD_G", make_station_label("🧾 Billing & Invoicing", c_g), mod_g_billing.render))
+        if "MOD_G" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:[cite: 20]
+            c_g = p_counts.get("BILLING", 0)[cite: 20]
+            menu_config.append(("MOD_G", make_station_label("🧾 Billing & Invoicing", c_g), mod_g_billing.render))[cite: 20]
+
+        # --- SECTION: DIRECTORIES ---
+        if account_type in ["SUPER_ADMIN", "CEO", "MANAGER"] or user_perms:[cite: 20]
+            st.markdown('<div class="nav-category">DIRECTORIES</div>', unsafe_allow_html=True)
+            menu_config.append(("CUSTOMERS", "🏢 Customers Directory", customer_dashboard.render))
+            menu_config.append(("VENDORS", "🏭 Vendors & Outsource", vendor_dashboard.render))
+
+        if not menu_config:
+            st.warning("No active permissions assigned.")
+            selected_key = None
+        else:
+            keys = [item[0] for item in menu_config]
+            labels_map = {item[0]: item[1] for item in menu_config}
+            handlers_map = {item[0]: item[2] for item in menu_config}
+
+            selected_key = st.radio(
+                "Navigate Station",
+                options=keys,
+                format_func=lambda k: labels_map[k],
+                label_visibility="collapsed"
+            )
+
+        # --- SECTION: SETTINGS & USER FOOTER ---
+        st.markdown('<div class="nav-category">SETTINGS</div>', unsafe_allow_html=True)
+
+        with st.popover("⚙️ Settings & PIN", use_container_width=True):
+            st.markdown("#### Change Password / PIN")
+            old_p = st.text_input("Current PIN *", type="password", key="chg_old_pwd").strip()
+            new_p = st.text_input("New PIN *", type="password", key="chg_new_pwd").strip()
+            conf_p = st.text_input("Confirm PIN *", type="password", key="chg_conf_pwd").strip()
+
+            if st.button("Update PIN", type="primary", use_container_width=True, key="btn_update_pwd"):
+                if not (old_p and new_p and conf_p):
+                    st.error("Please fill in all fields.")
+                elif new_p != conf_p:
+                    st.error("PINs do not match.")
+                elif len(new_p) < 4:
+                    st.error("Minimum 4 characters required.")
+                else:
+                    ok, msg = update_user_password(current_user["user_id"], old_p, new_p)[cite: 16]
+                    if ok:
+                        st.success(msg)
+                    else:
+                        st.error(msg)
+
+        if st.button("🚪 Logout", use_container_width=True):[cite: 20]
+            st.session_state.authenticated = False[cite: 20]
+            st.session_state.user = None[cite: 20]
+            st.session_state.selected_customer = None
+            st.session_state.selected_vendor = None
+            st.rerun()[cite: 20]
+
+    # --- RENDER DESK SCREEN ---
+    if selected_key and selected_key in handlers_map:
+        handlers_map[selected_key](current_user)
+
+
+if __name__ == "__main__":
+    main()
