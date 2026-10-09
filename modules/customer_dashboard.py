@@ -24,19 +24,30 @@ def render(user):
             color: #E6EDF3;
             margin-top: 4px;
         }
+        .status-pill {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 12px;
+            display: inline-block;
+        }
+        .pill-green { background: rgba(16, 185, 129, 0.15); color: #34D399; }
+        .pill-red { background: rgba(225, 6, 0, 0.15); color: #F87171; }
+        .pill-amber { background: rgba(245, 158, 11, 0.15); color: #FBBF24; }
         </style>
     """, unsafe_allow_html=True)
 
-    st.markdown("### 👥 Customer & Client Master Directory")
-    st.caption("Commercial accounts, lifetime booking totals, and active floor order tracking.")
+    # Initialize drill-down session state
+    if "selected_customer" not in st.session_state:
+        st.session_state.selected_customer = None
 
     try:
-        j_res = supabase.table("jobs").select("*").execute()
+        j_res = supabase.table("jobs").select("*").order("job_id", desc=True).execute()
         all_jobs = j_res.data or []
         i_res = supabase.table("job_items").select("*").execute()
         all_items = i_res.data or []
     except Exception as e:
-        st.error(f"Error fetching customer data: {e}")
+        st.error(f"Error connecting to database: {e}")
         return
 
     # Map job totals
@@ -45,7 +56,68 @@ def render(user):
         jid = it.get("job_id")
         job_val_map[jid] = job_val_map.get(jid, 0.0) + float(it.get("amount", 0) or 0)
 
-    # Aggregate client metadata
+    # --- DRILL-DOWN VIEW: JOBS OF SELECTED CUSTOMER ---
+    if st.session_state.selected_customer:
+        c_name = st.session_state.selected_customer
+        customer_jobs = [j for j in all_jobs if (j.get("client_name") or "").strip().lower() == c_name.lower()]
+
+        c_header_col, c_back_col = st.columns([5, 1.2])
+        with c_header_col:
+            st.markdown(f"### 🏢 Order History: <span style='color:#E10600;'>{c_name}</span>", unsafe_allow_html=True)
+            st.caption(f"Showing all {len(customer_jobs)} recorded jobsheets and deliverables for this account.")
+        with c_back_col:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("⬅️ Back to Directory", use_container_width=True, type="secondary"):
+                st.session_state.selected_customer = None
+                st.rerun()
+
+        st.markdown("---")
+
+        if not customer_jobs:
+            st.info("No recorded jobs found for this customer.")
+            return
+
+        for job in customer_jobs:
+            jid = job["job_id"]
+            items = get_job_items(jid)
+            job_val = job_val_map.get(jid, 0.0)
+            is_settled = job.get("current_stage") == "SETTLED"
+            is_ret = job.get("is_returned", False)
+
+            with st.container(border=True):
+                r1, r2, r3, r4 = st.columns([2, 3, 2, 1.5])
+                with r1:
+                    st.markdown(f"#### #{job.get('job_no')}")
+                    if is_ret:
+                        st.markdown("<span class='status-pill pill-red'>● DEFECT / RETURN</span>", unsafe_allow_html=True)
+                    elif is_settled:
+                        st.markdown("<span class='status-pill pill-green'>● SETTLED</span>", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"<span class='status-pill pill-amber'>● {job.get('current_stage')}</span>", unsafe_allow_html=True)
+                    st.caption(f"Due: `{job.get('due_date')}`")
+
+                with r2:
+                    st.markdown(f"**Contact:** `{job.get('contact_person') or 'N/A'}` | 📱 `{job.get('contact_phone') or 'N/A'}`")
+                    st.caption(f"Booked by: `{job.get('order_taken_by') or 'Sales'}` | Desk: `{job.get('current_stage')}`")
+                    if items:
+                        item_str = ", ".join([f"{it.get('item_name')} ({it.get('quantity')} {it.get('unit')})" for it in items])
+                        st.caption(f"📦 {item_str[:80]}{'...' if len(item_str) > 80 else ''}")
+
+                with r3:
+                    st.metric("Order Value", f"₹ {job_val:,.2f}")
+                    adv = float(job.get("advance_received", 0) or 0)
+                    bal = float(job.get("balance_amount", 0) or 0)
+                    st.caption(f"Adv: ₹{adv:,.0f} | Bal: ₹{bal:,.0f}")
+
+                with r4:
+                    st.caption("Billing Type")
+                    st.markdown(f"`{job.get('billing_type', 'NON_GST')}`")
+                    if job.get("invoice_file_url"):
+                        st.link_button("📥 Tax Invoice", job["invoice_file_url"], use_container_width=True)
+
+        return
+
+    # --- DIRECTORY VIEW: LIST ALL CUSTOMERS ---
     client_dict = {}
     for j in all_jobs:
         c_name = (j.get("client_name") or "Unnamed Client").strip()
@@ -60,7 +132,6 @@ def render(user):
                 "orders_count": 0,
                 "total_billed": 0.0,
                 "active_jobs": 0,
-                "last_order_date": str(j.get("created_at", ""))[:10]
             }
 
         client_dict[c_name]["orders_count"] += 1
@@ -73,7 +144,7 @@ def render(user):
     total_val = sum(c["total_billed"] for c in clients_list)
     total_active_jobs = sum(c["active_jobs"] for c in clients_list)
 
-    # --- TOP KPI RIBBON (Reference Image 1) ---
+    # Top KPI Ribbon
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         st.markdown(f"""
@@ -107,10 +178,10 @@ def render(user):
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # --- SEARCH & SORT CONTROLS ---
+    # Controls
     s1, s2 = st.columns([3, 1])
     with s1:
-        search_query = st.text_input("Search Clients", placeholder="Search by client name, contact person, or phone...", label_visibility="collapsed").strip().lower()
+        search_query = st.text_input("Search Clients", placeholder="Search by name, contact, or phone...", label_visibility="collapsed").strip().lower()
     with s2:
         sort_choice = st.selectbox("Sort", ["Highest Value", "Most Orders", "Alphabetical"], label_visibility="collapsed")
 
@@ -135,14 +206,13 @@ def render(user):
         st.info("No customer records match your search.")
         return
 
-    # --- 3-COLUMN CARD GRID (Reference Image 1) ---
+    # 3-Column Grid with Click-to-Open Action
     grid = st.columns(3)
     for idx, c in enumerate(filtered_clients):
         with grid[idx % 3]:
             with st.container(border=True):
                 st.markdown(f"#### 🏢 {c['client_name']}")
-                st.caption(f"👤 Contact Person: **{c['contact_person']}**")
-                st.caption(f"📱 Phone: `{c['contact_phone']}`")
+                st.caption(f"👤 Contact: **{c['contact_person']}** | 📱 `{c['contact_phone']}`")
 
                 st.markdown("---")
 
@@ -151,10 +221,17 @@ def render(user):
                     st.caption("Lifetime Value")
                     st.markdown(f"**₹ {c['total_billed']:,.2f}**")
                 with m2:
-                    st.caption("Total Orders")
+                    st.caption("Orders")
                     st.markdown(f"**{c['orders_count']} Jobs**")
 
                 if c["active_jobs"] > 0:
-                    st.markdown(f"<span style='color:#E10600; font-size:12px; font-weight:700;'>🔥 {c['active_jobs']} active order(s) on floor</span>", unsafe_allow_html=True)
+                    st.markdown(f"<span style='color:#E10600; font-size:11px; font-weight:700;'>🔥 {c['active_jobs']} active order(s) on floor</span>", unsafe_allow_html=True)
                 else:
-                    st.markdown("<span style='color:#34D399; font-size:12px; font-weight:700;'>✅ All orders settled</span>", unsafe_allow_html=True)
+                    st.markdown("<span style='color:#34D399; font-size:11px; font-weight:700;'>✅ All orders settled</span>", unsafe_allow_html=True)
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # Button to open jobs list for this customer
+                if st.button(f"📂 View Jobs ({c['orders_count']})", key=f"btn_open_c_{idx}", use_container_width=True, type="primary"):
+                    st.session_state.selected_customer = c["client_name"]
+                    st.rerun()
