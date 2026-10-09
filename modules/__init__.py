@@ -7,3 +7,5 @@ from . import mod_f_dispatch
 from . import mod_g_billing
 from . import manager_view
 from . import ceo_admin
+from . import vendor_dashboard
+from . import customer_dashboard

@@ -1,13 +1,3 @@
-import os
-import streamlit as st
-import time
-from database import (
-    authenticate_user, 
-    supabase, 
-    log_audit, 
-    update_user_password,
-    get_station_pending_counts
-)
 from modules import (
     mod_a_sales,
     mod_b_design,
@@ -17,7 +7,20 @@ from modules import (
     mod_f_dispatch,
     mod_g_billing,
     manager_view,
-    ceo_admin
+    ceo_admin,
+    vendor_dashboard,
+    customer_dashboard
+)
+
+import os
+import streamlit as st
+import time
+from database import (
+    authenticate_user, 
+    supabase, 
+    log_audit, 
+    update_user_password,
+    get_station_pending_counts
 )
 
 st.set_page_config(
@@ -288,14 +291,18 @@ def main():
             return f"{name}{badge}"
 
         # Executive Desks
+        # Executive Desks
         if account_type in ["SUPER_ADMIN", "CEO"]:
-            del_c = p_counts.get("DELETION_REQS", 0)
-            menu_config.append(("EXEC_OVERVIEW", format_nav_item("👑 Executive Overview", del_c, is_new=(del_c > 0)), ceo_admin.render_overview))
-            menu_config.append(("EXEC_RBAC", "👥 User & RBAC Master", ceo_admin.render_user_management))
+            del_count = p_counts.get("DELETION_REQS", 0)
+            lbl_exec = make_station_label("👑 Executive Floor KPI Overview", del_count)
+            menu_config.append(("EXEC_OVERVIEW", lbl_exec, ceo_admin.render_overview))
+            menu_config.append(("EXEC_RBAC", "👥 Staff & RBAC Admin", ceo_admin.render_user_management))
+            menu_config.append(("VENDORS", "🏢 Vendor Directory", vendor_dashboard.render))
+            menu_config.append(("CUSTOMERS", "👥 Customer Directory", customer_dashboard.render))
 
-        # Manager Desk
+        # Manager Track & Audit
         if account_type in ["MANAGER", "SUPER_ADMIN", "CEO"]:
-            menu_config.append(("MGR_TRACK", "🔍 Floor Track & Audit", manager_view.render))
+            menu_config.append(("MGR_TRACK", "🔍 Manager Track & Audit", manager_view.render))
 
         # Operational Floor Stations
         if "MOD_A" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
