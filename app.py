@@ -161,12 +161,23 @@ def inject_preadmin_dark_css():
 
 
 def render_signin_window():
-    """Centered white card login screen with brand red accent."""
+    """Centered crisp floating card login screen."""
     st.markdown("""
         <style>
-        .signin-card-header {
-            text-align: center;
-            margin-bottom: 20px;
+        /* Hide sidebar on login screen completely */
+        section[data-testid="stSidebar"] {
+            display: none !important;
+        }
+        /* Page background */
+        .stApp {
+            background: #0B0F19 !important;
+        }
+        /* Target card container styling */
+        div[data-testid="stVerticalBlock"] > div:has(div.signin-anchor) {
+            background-color: #FFFFFF !important;
+            border-radius: 12px !important;
+            padding: 32px 28px !important;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5) !important;
         }
         .signin-diamond {
             width: 18px;
@@ -181,43 +192,54 @@ def render_signin_window():
         .signin-brand-text {
             font-size: 20px;
             font-weight: 800;
-            color: #0F172A;
+            color: #0F172A !important;
             letter-spacing: 1px;
             display: inline-block;
             vertical-align: middle;
         }
         .signin-title {
             text-align: center;
-            font-size: 20px;
-            font-weight: 700;
-            color: #1E293B;
+            font-size: 22px;
+            font-weight: 800;
+            color: #0F172A !important;
             margin-top: 14px;
             margin-bottom: 4px;
         }
         .signin-sub {
             text-align: center;
             font-size: 13px;
-            color: #64748B;
+            color: #64748B !important;
             line-height: 1.4;
             margin-bottom: 20px;
         }
-        .signin-label {
-            font-size: 13px;
-            font-weight: 600;
-            color: #334155;
-            margin-bottom: 6px;
+        /* Ensure input labels and texts remain visible black */
+        div[data-testid="stForm"] label p {
+            color: #334155 !important;
+            font-weight: 600 !important;
+            font-size: 13px !important;
+        }
+        div[data-testid="stForm"] input {
+            color: #0F172A !important;
+            background-color: #F8FAFC !important;
+            border: 1px solid #CBD5E1 !important;
+        }
+        /* Brand red submit button */
+        div[data-testid="stForm"] button[kind="primary"] {
+            background-color: #E11D48 !important;
+            border: none !important;
+            color: #FFFFFF !important;
+            font-weight: 700 !important;
+            padding: 10px 0 !important;
+            border-radius: 6px !important;
+        }
+        div[data-testid="stForm"] button[kind="primary"]:hover {
+            background-color: #BE123C !important;
         }
         .signin-footer {
             text-align: center;
-            font-size: 13px;
-            color: #94A3B8;
-            margin-top: 20px;
-        }
-        .signin-copyright {
-            text-align: center;
             font-size: 12px;
-            color: #64748B;
-            margin-top: 28px;
+            color: #94A3B8;
+            margin-top: 18px;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -227,11 +249,12 @@ def render_signin_window():
 
     with col_card:
         with st.container(border=True):
+            st.markdown('<div class="signin-anchor"></div>', unsafe_allow_html=True)
             st.markdown("""
-                <div class="signin-card-header">
+                <div style="text-align: center; margin-bottom: 16px;">
                     <div>
                         <div class="signin-diamond"></div>
-                        <div class="signin-brand-text">ADNET ERP</div>
+                        <span class="signin-brand-text">ADNET ERP</span>
                     </div>
                     <div class="signin-title">Sign In</div>
                     <div class="signin-sub">
@@ -241,11 +264,8 @@ def render_signin_window():
             """, unsafe_allow_html=True)
 
             with st.form("login_form"):
-                st.markdown('<div class="signin-label">Username / Staff ID</div>', unsafe_allow_html=True)
-                username = st.text_input("Username", placeholder="e.g. admin or staff username", label_visibility="collapsed").strip()
-
-                st.markdown('<div class="signin-label" style="margin-top: 12px;">Password / PIN</div>', unsafe_allow_html=True)
-                password = st.text_input("Password", placeholder="••••••••", type="password", label_visibility="collapsed").strip()
+                username = st.text_input("Username / Staff ID", placeholder="e.g. admin or username").strip()
+                password = st.text_input("Password / PIN", placeholder="••••••••", type="password").strip()
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 submit = st.form_submit_button("Sign In", type="primary", use_container_width=True)
@@ -254,24 +274,21 @@ def render_signin_window():
                     if not (username and password):
                         st.error("Please provide both username and password.")
                     else:
-                        user = authenticate_user(username, password)
+                        user = authenticate_user(username, password)[cite: 18]
                         if user:
                             st.session_state.authenticated = True
                             st.session_state.user = user
-                            log_audit(user["user_id"], "LOGIN", f"User {username} logged into system.")
+                            log_audit(user["user_id"], "LOGIN", f"User {username} logged into system.")[cite: 18]
                             st.rerun()
                         else:
                             st.error("Invalid credentials or deactivated account.")
 
             st.markdown("""
                 <div class="signin-footer">
-                    Need workstation access? <b>Contact Administrator</b>
-                </div>
-                <div class="signin-copyright">
-                    2026 © AdNet Print & Sign ERP Floor Systems
+                    Need workstation access? Contact Administrator<br>
+                    <span style="font-size: 11px; color: #64748B;">2026 © AdNet Operations Systems</span>
                 </div>
             """, unsafe_allow_html=True)
-
 
 def main():
     inject_preadmin_dark_css()
