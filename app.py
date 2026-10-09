@@ -316,7 +316,7 @@ def main():
 
         # --- SECTION: MANAGEMENT ---
         if account_type in ["SUPER_ADMIN", "CEO", "MANAGER"]:[cite: 20]
-            st.markdown('<div class="nav-category">MANAGEMENT</div>', unsafe_allow_html=True)
+            st.markdown('<div class="nav-category">DIRECTORIES</div>', unsafe_allow_html=True)
             
             if account_type in ["SUPER_ADMIN", "CEO"]:[cite: 20]
                 del_count = p_counts.get("DELETION_REQS", 0)[cite: 20]
