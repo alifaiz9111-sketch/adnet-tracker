@@ -296,7 +296,7 @@ def main():
         if st.button("✉️ Mail Today's Jobsheet", use_container_width=True):
             with st.spinner("Dispatching summary..."):
                 try:
-                    from email_service import send_daily_jobsheet_digest[cite: 20]
+                    from email_service import send_daily_jobsheet_digest
                     recipient = current_user.get("email")[cite: 20]
                     ok, res_msg = send_daily_jobsheet_digest(recipient_email=recipient)[cite: 20]
                     if ok:
@@ -378,39 +378,4 @@ def main():
             )
 
         # --- SECTION: SETTINGS & USER FOOTER ---
-        st.markdown('<div class="nav-category">SETTINGS</div>', unsafe_allow_html=True)
-
-        with st.popover("⚙️ Settings & PIN", use_container_width=True):
-            st.markdown("#### Change Password / PIN")
-            old_p = st.text_input("Current PIN *", type="password", key="chg_old_pwd").strip()
-            new_p = st.text_input("New PIN *", type="password", key="chg_new_pwd").strip()
-            conf_p = st.text_input("Confirm PIN *", type="password", key="chg_conf_pwd").strip()
-
-            if st.button("Update PIN", type="primary", use_container_width=True, key="btn_update_pwd"):
-                if not (old_p and new_p and conf_p):
-                    st.error("Please fill in all fields.")
-                elif new_p != conf_p:
-                    st.error("PINs do not match.")
-                elif len(new_p) < 4:
-                    st.error("Minimum 4 characters required.")
-                else:
-                    ok, msg = update_user_password(current_user["user_id"], old_p, new_p)[cite: 16]
-                    if ok:
-                        st.success(msg)
-                    else:
-                        st.error(msg)
-
-        if st.button("🚪 Logout", use_container_width=True):[cite: 20]
-            st.session_state.authenticated = False[cite: 20]
-            st.session_state.user = None[cite: 20]
-            st.session_state.selected_customer = None
-            st.session_state.selected_vendor = None
-            st.rerun()[cite: 20]
-
-    # --- RENDER DESK SCREEN ---
-    if selected_key and selected_key in handlers_map:
-        handlers_map[selected_key](current_user)
-
-
-if __name__ == "__main__":
-    main()
+        st.markdown('<div class="nav-
