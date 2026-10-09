@@ -161,25 +161,27 @@ def inject_preadmin_dark_css():
 
 
 def render_signin_window():
-    """Centered crisp floating card login screen."""
+    """Centered floating card login screen matching config.toml theme."""
     st.markdown("""
         <style>
-        /* Hide sidebar on login screen completely */
+        /* Hide sidebar on login screen */
         section[data-testid="stSidebar"] {
             display: none !important;
         }
-        /* Page background */
-        .stApp {
-            background: #0B0F19 !important;
-        }
-        /* Target card container styling */
-        div[data-testid="stVerticalBlock"] > div:has(div.signin-anchor) {
-            background-color: #FFFFFF !important;
+        /* Style the card container */
+        div[data-testid="stForm"] {
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
             border-radius: 12px !important;
-            padding: 32px 28px !important;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5) !important;
+            background-color: #161B22 !important;
+            padding: 30px 24px !important;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important;
         }
-        .signin-diamond {
+        /* Custom Diamond Icon */
+        .login-brand-box {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .login-diamond {
             width: 18px;
             height: 18px;
             background: #E11D48;
@@ -189,41 +191,21 @@ def render_signin_window():
             margin-right: 8px;
             vertical-align: middle;
         }
-        .signin-brand-text {
-            font-size: 20px;
-            font-weight: 800;
-            color: #0F172A !important;
-            letter-spacing: 1px;
-            display: inline-block;
-            vertical-align: middle;
-        }
-        .signin-title {
-            text-align: center;
+        .login-brand-title {
             font-size: 22px;
             font-weight: 800;
-            color: #0F172A !important;
-            margin-top: 14px;
-            margin-bottom: 4px;
+            color: #FFFFFF !important;
+            display: inline-block;
+            vertical-align: middle;
+            letter-spacing: 0.5px;
         }
-        .signin-sub {
-            text-align: center;
+        .login-subtext {
             font-size: 13px;
-            color: #64748B !important;
+            color: #8B949E !important;
+            margin-top: 6px;
             line-height: 1.4;
-            margin-bottom: 20px;
         }
-        /* Ensure input labels and texts remain visible black */
-        div[data-testid="stForm"] label p {
-            color: #334155 !important;
-            font-weight: 600 !important;
-            font-size: 13px !important;
-        }
-        div[data-testid="stForm"] input {
-            color: #0F172A !important;
-            background-color: #F8FAFC !important;
-            border: 1px solid #CBD5E1 !important;
-        }
-        /* Brand red submit button */
+        /* Submit button: Brand Red */
         div[data-testid="stForm"] button[kind="primary"] {
             background-color: #E11D48 !important;
             border: none !important;
@@ -231,15 +213,10 @@ def render_signin_window():
             font-weight: 700 !important;
             padding: 10px 0 !important;
             border-radius: 6px !important;
+            margin-top: 10px !important;
         }
         div[data-testid="stForm"] button[kind="primary"]:hover {
             background-color: #BE123C !important;
-        }
-        .signin-footer {
-            text-align: center;
-            font-size: 12px;
-            color: #94A3B8;
-            margin-top: 18px;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -248,48 +225,47 @@ def render_signin_window():
     _, col_card, _ = st.columns([1, 1.2, 1])
 
     with col_card:
-        with st.container(border=True):
-            st.markdown('<div class="signin-anchor"></div>', unsafe_allow_html=True)
+        with st.form("login_form"):
             st.markdown("""
-                <div style="text-align: center; margin-bottom: 16px;">
+                <div class="login-brand-box">
                     <div>
-                        <div class="signin-diamond"></div>
-                        <span class="signin-brand-text">ADNET ERP</span>
+                        <span class="login-diamond"></span>
+                        <span class="login-brand-title">ADNET ERP</span>
                     </div>
-                    <div class="signin-title">Sign In</div>
-                    <div class="signin-sub">
-                        Enter your username and password to<br>access floor management.
+                    <div style="font-size: 18px; font-weight: 700; color: #FFFFFF; margin-top: 12px;">Sign In</div>
+                    <div class="login-subtext">
+                        Enter your credentials to access the floor management system.
                     </div>
                 </div>
             """, unsafe_allow_html=True)
 
-            with st.form("login_form"):
-                username = st.text_input("Username / Staff ID", placeholder="e.g. admin or username").strip()
-                password = st.text_input("Password / PIN", placeholder="••••••••", type="password").strip()
+            username = st.text_input("Username / Staff ID", placeholder="e.g. admin").strip()
+            password = st.text_input("Password / PIN", placeholder="••••••••", type="password").strip()
 
-                st.markdown("<br>", unsafe_allow_html=True)
-                submit = st.form_submit_button("Sign In", type="primary", use_container_width=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+            submit = st.form_submit_button("Sign In", type="primary", use_container_width=True)
 
-                if submit:
-                    if not (username and password):
-                        st.error("Please provide both username and password.")
+            if submit:
+                if not (username and password):
+                    st.error("Please provide both username and password.")
+                else:
+                    user = authenticate_user(username, password)[cite: 16]
+                    if user:
+                        st.session_state.authenticated = True
+                        st.session_state.user = user
+                        log_audit(user["user_id"], "LOGIN", f"User {username} logged into system.")[cite: 16]
+                        st.rerun()
                     else:
-                        user = authenticate_user(username, password)[cite: 18]
-                        if user:
-                            st.session_state.authenticated = True
-                            st.session_state.user = user
-                            log_audit(user["user_id"], "LOGIN", f"User {username} logged into system.")[cite: 18]
-                            st.rerun()
-                        else:
-                            st.error("Invalid credentials or deactivated account.")
+                        st.error("Invalid credentials or deactivated account.")
 
-            st.markdown("""
-                <div class="signin-footer">
-                    Need workstation access? Contact Administrator<br>
-                    <span style="font-size: 11px; color: #64748B;">2026 © AdNet Operations Systems</span>
-                </div>
-            """, unsafe_allow_html=True)
+        st.markdown("""
+            <div style="text-align: center; font-size: 12px; color: #8B949E; margin-top: 16px;">
+                Need workstation access? Contact Administrator<br>
+                <span style="font-size: 11px; color: #4B5563;">2026 © AdNet Operations Systems</span>
+            </div>
+        """, unsafe_allow_html=True)
 
+        
 def main():
     inject_preadmin_dark_css()
 
