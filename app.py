@@ -349,4 +349,16 @@ def main():
 
         if "MOD_D" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
             c_d = p_counts.get("PRODUCTION", 0)
-            menu_config.append(("MOD_D", make_station_label("⚙
+            menu_config.append(("MOD_D", make_station_label("⚙️ Production Floor", c_d), mod_d_production.render))
+
+        if "MOD_E" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
+            c_e = p_counts.get("QC", 0)
+            menu_config.append(("MOD_E", make_station_label("🔍 Quality Check (QC)", c_e), mod_e_qc.render))
+
+        if "MOD_F" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
+            c_f = p_counts.get("DISPATCH", 0)
+            menu_config.append(("MOD_F", make_station_label("🚚 Dispatch & Delivery", c_f), mod_f_dispatch.render))
+
+        if "MOD_G" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
+            c_g = p_counts.get("BILLING", 0)
+            menu_config.append(("MOD_G", make_station_label("🧾 Billing & Invoicing", c_g), mod_g_billing.render))
