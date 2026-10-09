@@ -23,7 +23,7 @@ from modules import (
 )
 
 st.set_page_config(
-    page_title="AdNet Operations",
+    page_title="AdNet Operations ERP",
     page_icon="🖨️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -36,47 +36,139 @@ if "user" not in st.session_state:
     st.session_state.user = None
 
 
-def inject_custom_css():
-    """Injects sleek navigation and badge styling."""
+def inject_preadmin_dark_css():
+    """Applies Preadmin deep-navy sidebar styling with solid brand red active selection."""
     st.markdown("""
         <style>
-        @keyframes blinker {
-            50% { opacity: 0.2; }
+        /* Overall Sidebar Background */
+        section[data-testid="stSidebar"] {
+            background-color: #0B0F19 !important;
+            border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
+            padding-top: 1rem !important;
         }
-        .badge-new {
-            background-color: #E10600;
-            color: #FFFFFF !important;
-            font-size: 10px;
+
+        /* Top Brand Logo & Title */
+        .sidebar-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 4px 10px 18px 10px;
+        }
+        .sidebar-brand-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #E11D48 0%, #BE123C 100%);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #FFFFFF;
             font-weight: 800;
-            padding: 2px 6px;
-            border-radius: 4px;
-            animation: blinker 1s linear infinite;
-            margin-left: 6px;
-            display: inline-block;
+            font-size: 16px;
+            box-shadow: 0 2px 8px rgba(225, 29, 72, 0.4);
         }
-        .badge-count {
-            background-color: rgba(255, 255, 255, 0.08);
-            color: #38BDF8 !important;
+        .sidebar-brand-text {
+            font-size: 20px;
+            font-weight: 800;
+            color: #FFFFFF;
+            letter-spacing: -0.5px;
+        }
+
+        /* Category / Section Headers */
+        .nav-category {
+            font-size: 11px;
+            font-weight: 700;
+            color: #4B5563;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            margin: 18px 0 6px 12px;
+        }
+
+        /* Sidebar Navigation Radio Buttons */
+        div[data-testid="stRadio"] {
+            background: transparent !important;
+        }
+        div[data-testid="stRadio"] > div {
+            gap: 3px !important;
+        }
+
+        /* Hide Native Radio Circle */
+        div[data-testid="stRadio"] label > div:first-child {
+            display: none !important;
+        }
+
+        /* Default Inactive Nav Item */
+        div[data-testid="stRadio"] label {
+            background-color: transparent !important;
+            padding: 10px 14px !important;
+            border-radius: 8px !important;
+            margin: 0 !important;
+            cursor: pointer !important;
+            transition: all 0.18s ease-in-out !important;
+            border: none !important;
+        }
+        div[data-testid="stRadio"] label p {
+            color: #9CA3AF !important;
+            font-size: 13.5px !important;
+            font-weight: 500 !important;
+            margin: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            width: 100% !important;
+        }
+
+        /* Hover State */
+        div[data-testid="stRadio"] label:hover {
+            background-color: rgba(255, 255, 255, 0.05) !important;
+        }
+        div[data-testid="stRadio"] label:hover p {
+            color: #FFFFFF !important;
+        }
+
+        /* BRAND RED ACTIVE SELECTED PILL (Replaces the purple pill) */
+        div[data-testid="stRadio"] label:has(input:checked),
+        div[data-testid="stRadio"] label[data-checked="true"] {
+            background-color: #E11D48 !important;
+            box-shadow: 0 4px 14px rgba(225, 29, 72, 0.35) !important;
+        }
+        div[data-testid="stRadio"] label:has(input:checked) p,
+        div[data-testid="stRadio"] label[data-checked="true"] p {
+            color: #FFFFFF !important;
+            font-weight: 700 !important;
+        }
+
+        /* Count Badge inside Radio Item */
+        .nav-count-badge {
+            background: rgba(0, 0, 0, 0.25);
+            color: #FFFFFF;
             font-size: 11px;
             font-weight: 700;
             padding: 2px 7px;
-            border-radius: 10px;
-            margin-left: 6px;
-            display: inline-block;
+            border-radius: 12px;
+            margin-left: auto;
         }
-        div[data-testid="stRadio"] > div {
-            gap: 4px;
+
+        /* Digest button styling */
+        .sidebar-action-btn button {
+            background-color: rgba(255, 255, 255, 0.04) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            color: #D1D5DB !important;
+            font-size: 12px !important;
+            border-radius: 8px !important;
+            margin-top: 4px;
         }
-        div[data-testid="stRadio"] label {
-            padding: 5px 8px;
-            border-radius: 6px;
+        .sidebar-action-btn button:hover {
+            background-color: rgba(225, 29, 72, 0.15) !important;
+            border-color: #E11D48 !important;
+            color: #FFFFFF !important;
         }
         </style>
     """, unsafe_allow_html=True)
 
 
 def main():
-    inject_custom_css()
+    inject_preadmin_dark_css()
 
     # --- LOGIN SCREEN ---
     if not st.session_state.authenticated:
@@ -94,9 +186,9 @@ def main():
             if resolved_logo:
                 st.image(resolved_logo, use_container_width=True)
             else:
-                st.markdown("<h2 style='text-align: center;'>🖨️ AdNet Operations & Floor Management</h2>", unsafe_allow_html=True)
+                st.markdown("<h2 style='text-align: center; color: #FFFFFF;'>🖨️ AdNet Floor Operations</h2>", unsafe_allow_html=True)
 
-        st.caption("<p style='text-align: center;'>Login with ID - Password</p>", unsafe_allow_html=True)
+        st.caption("<p style='text-align: center;'>Sign in with ID - Password</p>", unsafe_allow_html=True)
 
         _, col, _ = st.columns([1, 1.5, 1])
         with col:
@@ -110,96 +202,102 @@ def main():
                     if user:
                         st.session_state.authenticated = True
                         st.session_state.user = user
-                        log_audit(user["user_id"], "LOGIN", f"User {username} logged into system.")
+                        log_audit(user["user_id"], "LOGIN", f"User {username} logged in.")
                         st.rerun()
                     else:
-                        st.error("Invalid credentials or deactivated account.")
+                        st.error("Invalid credentials or inactive account.")
         return
 
-    # --- AUTHENTICATED SESSION ---
+    # --- LOGGED IN STATE ---
     current_user = st.session_state.user
     account_type = current_user.get("account_type", "STAFF")
     user_perms = current_user.get("permissions") or []
 
-    # Pull real-time queue counts
     p_counts = get_station_pending_counts()
 
-    # Sidebar Navigation
+    # --- SIDEBAR (PREADMIN STYLE) ---
     with st.sidebar:
-        st.markdown(f"### 👤 {current_user['full_name']}")
-        st.caption(f"Role: `{account_type}` | `@{current_user['username']}`")
-        if current_user.get("primary_station"):
-            st.caption(f"Station: `{current_user['primary_station']}`")
+        # 1. Top Brand Icon & Title (Preadmin style)
+        st.markdown("""
+            <div class="sidebar-brand">
+                <div class="sidebar-brand-icon">A</div>
+                <div class="sidebar-brand-text">AdNet ERP</div>
+            </div>
+        """, unsafe_allow_html=True)
 
-        st.markdown("---")
-
-        # --- BUTTON: MAIL TODAY'S JOBSHEET ---
-        if st.button("📧 Mail Today's Jobsheet", use_container_width=True, type="secondary"):
-            with st.spinner("Compiling and sending today's jobsheets..."):
+        # 2. Email Digest Trigger Button
+        st.markdown('<div class="sidebar-action-btn">', unsafe_allow_html=True)
+        if st.button("✉️ Mail Today's Jobsheet", use_container_width=True):
+            with st.spinner("Dispatching summary..."):
                 try:
                     from email_service import send_daily_jobsheet_digest
                     recipient = current_user.get("email")
                     ok, res_msg = send_daily_jobsheet_digest(recipient_email=recipient)
                     if ok:
-                        st.toast(f"✅ {res_msg}", icon="📧")
+                        st.toast(f"✅ {res_msg}", icon="✉️")
                     else:
                         st.warning(res_msg)
                 except Exception as ex:
                     st.error(f"Failed to send email: {ex}")
-
-        st.markdown("### 📂 Workspaces")
+        st.markdown('</div>', unsafe_allow_html=True)
 
         menu_config = []
 
-        # Label helper defined before any usage
         def make_station_label(title: str, count: int = 0) -> str:
             if count > 0:
-                return f"{title}  ({count})  ●"
+                return f"{title}  ({count})"
             return title
 
-        # Executive Desks
-        if account_type in ["SUPER_ADMIN", "CEO"]:
-            del_count = p_counts.get("DELETION_REQS", 0)
-            lbl_exec = make_station_label("👑 Executive Floor KPI Overview", del_count)
-            menu_config.append(("EXEC_OVERVIEW", lbl_exec, ceo_admin.render_overview))
-            menu_config.append(("EXEC_RBAC", "👥 Staff & RBAC Admin", ceo_admin.render_user_management))
-            menu_config.append(("VENDORS", "🏢 Vendor Directory", vendor_dashboard.render))
-            menu_config.append(("CUSTOMERS", "👥 Customer Directory", customer_dashboard.render))
+        # --- SECTION: MANAGEMENT ---
+        if account_type in ["SUPER_ADMIN", "CEO", "MANAGER"]:
+            st.markdown('<div class="nav-category">MANAGEMENT</div>', unsafe_allow_html=True)
+            
+            if account_type in ["SUPER_ADMIN", "CEO"]:
+                del_count = p_counts.get("DELETION_REQS", 0)
+                lbl_exec = make_station_label("👑 Executive Overview", del_count)
+                menu_config.append(("EXEC_OVERVIEW", lbl_exec, ceo_admin.render_overview))
+                menu_config.append(("EXEC_RBAC", "👥 Staff & RBAC Admin", ceo_admin.render_user_management))
 
-        # Manager Track & Audit
-        if account_type in ["MANAGER", "SUPER_ADMIN", "CEO"]:
-            menu_config.append(("MGR_TRACK", "🔍 Manager Track & Audit", manager_view.render))
+            menu_config.append(("MGR_TRACK", "🔍 Floor Track & Audit", manager_view.render))
 
-        # Workstation Modules with Pending Counters
+        # --- SECTION: OPERATIONS FLOOR ---
+        st.markdown('<div class="nav-category">OPERATIONS</div>', unsafe_allow_html=True)
+
         if "MOD_A" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
-            menu_config.append(("MOD_A", "📝 1. Order Intake (Sales)", mod_a_sales.render))
+            menu_config.append(("MOD_A", "📝 Order Intake (Sales)", mod_a_sales.render))
 
         if "MOD_B" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
             c_b = p_counts.get("DESIGN", 0)
-            menu_config.append(("MOD_B", make_station_label("🎨 2. Design & Proofs", c_b), mod_b_design.render))
+            menu_config.append(("MOD_B", make_station_label("🎨 Design & Proofs", c_b), mod_b_design.render))
 
         if "MOD_C" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
             c_c = p_counts.get("PAYMENT", 0)
-            menu_config.append(("MOD_C", make_station_label("💳 3. Advance / Accounts Clearance", c_c), mod_c_payment.render))
+            menu_config.append(("MOD_C", make_station_label("💳 Accounts Clearance", c_c), mod_c_payment.render))
 
         if "MOD_D" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
             c_d = p_counts.get("PRODUCTION", 0)
-            menu_config.append(("MOD_D", make_station_label("⚙️ 4. Production Floor", c_d), mod_d_production.render))
+            menu_config.append(("MOD_D", make_station_label("⚙️ Production Floor", c_d), mod_d_production.render))
 
         if "MOD_E" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
             c_e = p_counts.get("QC", 0)
-            menu_config.append(("MOD_E", make_station_label("🔍 5. Quality Check (QC)", c_e), mod_e_qc.render))
+            menu_config.append(("MOD_E", make_station_label("🔍 Quality Check (QC)", c_e), mod_e_qc.render))
 
         if "MOD_F" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
             c_f = p_counts.get("DISPATCH", 0)
-            menu_config.append(("MOD_F", make_station_label("🚚 6. Dispatch & Field Delivery", c_f), mod_f_dispatch.render))
+            menu_config.append(("MOD_F", make_station_label("🚚 Dispatch & Delivery", c_f), mod_f_dispatch.render))
 
         if "MOD_G" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
             c_g = p_counts.get("BILLING", 0)
-            menu_config.append(("MOD_G", make_station_label("🧾 7. Billing & Invoicing Desk", c_g), mod_g_billing.render))
+            menu_config.append(("MOD_G", make_station_label("🧾 Billing & Invoicing", c_g), mod_g_billing.render))
+
+        # --- SECTION: DIRECTORIES ---
+        if account_type in ["SUPER_ADMIN", "CEO", "MANAGER"] or user.get("can_manage_vendors"):
+            st.markdown('<div class="nav-category">DIRECTORIES</div>', unsafe_allow_html=True)
+            menu_config.append(("CUSTOMERS", "🏢 Customers Directory", customer_dashboard.render))
+            menu_config.append(("VENDORS", "🏭 Vendors & Outsource", vendor_dashboard.render))
 
         if not menu_config:
-            st.warning("No active module permissions assigned. Please contact the administrator.")
+            st.warning("No active permissions assigned.")
             selected_key = None
         else:
             keys = [item[0] for item in menu_config]
@@ -213,20 +311,22 @@ def main():
                 label_visibility="collapsed"
             )
 
-        st.markdown("---")
-        with st.popover("🔑 Change Password", use_container_width=True):
-            st.markdown("#### Update Password / PIN")
-            old_p = st.text_input("Current Password *", type="password", key="chg_old_pwd").strip()
-            new_p = st.text_input("New Password *", type="password", key="chg_new_pwd").strip()
-            conf_p = st.text_input("Confirm New Password *", type="password", key="chg_conf_pwd").strip()
+        # --- SECTION: SETTINGS & USER FOOTER ---
+        st.markdown('<div class="nav-category">SETTINGS</div>', unsafe_allow_html=True)
 
-            if st.button("Update Password", type="primary", use_container_width=True, key="btn_update_pwd"):
+        with st.popover("⚙️ Settings & PIN", use_container_width=True):
+            st.markdown("#### Change Password / PIN")
+            old_p = st.text_input("Current PIN *", type="password", key="chg_old_pwd").strip()
+            new_p = st.text_input("New PIN *", type="password", key="chg_new_pwd").strip()
+            conf_p = st.text_input("Confirm PIN *", type="password", key="chg_conf_pwd").strip()
+
+            if st.button("Update PIN", type="primary", use_container_width=True, key="btn_update_pwd"):
                 if not (old_p and new_p and conf_p):
-                    st.error("Please fill in all password fields.")
+                    st.error("Please fill in all fields.")
                 elif new_p != conf_p:
-                    st.error("New password and confirmation do not match.")
+                    st.error("PINs do not match.")
                 elif len(new_p) < 4:
-                    st.error("Password must be at least 4 characters long.")
+                    st.error("Minimum 4 characters required.")
                 else:
                     ok, msg = update_user_password(current_user["user_id"], old_p, new_p)
                     if ok:
@@ -237,9 +337,11 @@ def main():
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.authenticated = False
             st.session_state.user = None
+            st.session_state.selected_customer = None
+            st.session_state.selected_vendor = None
             st.rerun()
 
-    # Render Screen
+    # --- RENDER DESK SCREEN ---
     if selected_key and selected_key in handlers_map:
         handlers_map[selected_key](current_user)
 
