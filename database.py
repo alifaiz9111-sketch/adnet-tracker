@@ -427,3 +427,27 @@ def record_payment_and_release(job_id, user_name, advance_received, balance_rema
         return True, "Payment recorded. Job released to Production Floor!"
     except Exception as e:
         return False, str(e)
+
+def get_station_pending_counts():
+    """Counts pending active jobs for each station stage."""
+    counts = {
+        "DESIGN": 0,
+        "PAYMENT": 0,
+        "PRODUCTION": 0,
+        "QC": 0,
+        "DISPATCH": 0,
+        "BILLING": 0,
+        "DELETION_REQS": 0,
+    }
+    try:
+        res = supabase.table("jobs").select("current_stage, is_returned, return_reason").neq("current_stage", "SETTLED").execute()
+        jobs = res.data or []
+        for j in jobs:
+            stg = j.get("current_stage")
+            if (j.get("return_reason") or "").startswith("[DELETION_REQ]"):
+                counts["DELETION_REQS"] += 1
+            if stg in counts:
+                counts[stg] += 1
+    except Exception:
+        pass
+    return counts
