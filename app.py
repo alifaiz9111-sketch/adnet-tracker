@@ -134,18 +134,25 @@ def main():
         st.markdown("---")
 
         # --- BUTTON: MAIL TODAY'S JOBSHEET (ABOVE WORKSPACES) ---
-        if st.button("📧 Mail Today's Jobsheet", use_container_width=True, type="secondary"):
-            with st.spinner("Compiling and sending today's jobsheets..."):
-                try:
-                    from email_service import send_daily_jobsheet_digest
-                    recipient = current_user.get("email")
-                    ok, res_msg = send_daily_jobsheet_digest(recipient_email=recipient)
-                    if ok:
-                        st.toast(f"✅ {res_msg}", icon="📧")
-                    else:
-                        st.warning(res_msg)
-                except Exception as ex:
-                    st.error(f"Failed to send email: {ex}")
+        with st.popover("📧 Mail Today's Jobsheet", use_container_width=True):
+            st.markdown("##### 📨 Send Digest")
+            target_recipient = st.text_input(
+                "Recipient Address",
+                value="khalikhussain80@gmail.com",
+                placeholder="Enter email address"
+            ).strip()
+
+            if st.button("Send Email", type="primary", use_container_width=True):
+                with st.spinner("Connecting to SMTP server and dispatching..."):
+                    try:
+                        from email_service import send_daily_jobsheet_digest
+                        ok, res_msg = send_daily_jobsheet_digest(recipient_email=target_recipient)
+                        if ok:
+                            st.success(res_msg)
+                        else:
+                            st.error(res_msg)
+                    except Exception as ex:
+                        st.error(f"Error: {ex}")
 
         st.markdown("### 📂 Workspaces")
 

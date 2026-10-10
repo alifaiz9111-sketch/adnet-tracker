@@ -3,67 +3,62 @@ import smtplib
 from datetime import date
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+import streamlit as st
 from database import supabase, get_job_items
 
-# Configure SMTP parameters via environment or fallback
-SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-SMTP_EMAIL = os.getenv("SMTP_EMAIL", "")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-DEFAULT_RECIPIENT = os.getenv("DEFAULT_MANAGEMENT_EMAIL", SMTP_EMAIL)
+# 1. Resolve credentials directly from [ceo_email] in st.secrets
+if "ceo_email" in st.secrets:
+    SMTP_SERVER = st.secrets["ceo_email"].get("smtp_server", "smtp.gmail.com")
+    SMTP_PORT = int(st.secrets["ceo_email"].get("smtp_port", 587))
+    SMTP_EMAIL = st.secrets["ceo_email"].get("sender_email", "")
+    SMTP_PASSWORD = st.secrets["ceo_email"].get("sender_password", "")
+    CEO_RECIPIENT = st.secrets["ceo_email"].get("ceo_recipient", "")
+else:
+    SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+    SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+    SMTP_EMAIL = os.getenv("SMTP_EMAIL", "alifaiz.adnetprint@gmail.com")
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "afacdfhhbaqgduyg")
+    CEO_RECIPIENT = os.getenv("CEO_RECIPIENT", "khalikhussain80@gmail.com")
+
+DEFAULT_RECIPIENTS = [CEO_RECIPIENT] if CEO_RECIPIENT else []
 
 
-def send_email(subject: str, html_body: str, recipient: str = None) -> bool:
-    """Standard utility function to dispatch HTML emails via SMTP."""
-    target = recipient or DEFAULT_RECIPIENT
-    if not SMTP_EMAIL or not SMTP_PASSWORD or not target:
-        return False
+def send_email(subject: str, html_body: str, recipient: str = None) -> tuple[bool, str]:
+    """Dispatches HTML emails via SMTP and returns status with diagnostic feedback."""
+    target = recipient or CEO_RECIPIENT
+
+    if not SMTP_EMAIL:
+        return False, "Sender email missing in [ceo_email]."
+    if not SMTP_PASSWORD:
+        return False, "App password missing in [ceo_email]."
+    if not target:
+        return False, "Recipient email address missing."
 
     try:
         msg = MIMEMultipart()
-        msg["From"] = SMTP_EMAIL
+        msg["From"] = f"AdNet Operations <{SMTP_EMAIL}>"
         msg["To"] = target
         msg["Subject"] = subject
         msg.attach(MIMEText(html_body, "html"))
 
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=20)
+        server.ehlo()
         server.starttls()
-        server.login(SMTP_EMAIL, SMTP_PASSWORD)
-        server.sendmail(SMTP_EMAIL, target, msg.as_string())
+        server.ehlo()
+        server.login(SMTP_EMAIL.strip(), SMTP_PASSWORD.strip())
+        
+        targets = [t.strip() for t in target.split(",") if t.strip()]
+        server.sendmail(SMTP_EMAIL.strip(), targets, msg.as_string())
         server.quit()
-        return True
-    except Exception:
-        return False
+        return True, f"Digest sent successfully to {target}."
+    except smtplib.SMTPAuthenticationError:
+        return False, "SMTP Authentication Failed: Check your Google App Password."
+    except Exception as e:
+        return False, f"SMTP Connection Error: {str(e)}"
 
 
-def send_new_jobsheet_alert(header_payload: dict, line_items: list):
-    """Sends immediate dispatch alert to production/management when order is created."""
-    job_no = header_payload.get("job_no", "N/A")
-    client = header_payload.get("client_name", "N/A")
-    due = header_payload.get("due_date", "N/A")
-    desk = header_payload.get("current_stage", "N/A")
-
-    rows = ""
-    total = 0.0
-    for it in line_items:
-        amt = float(it.get("amount", 0.0) or 0.0)
-        total += amt
-        rows += f"<tr><td>{it.get('item_name')}</td><td>{it.get('quantity')}</td><td>₹ {amt:,.2f}</td></tr>"
-
-    html = f"""
-    <h2>New Jobsheet Logged: #{job_no}</h2>
-    <p><b>Client:</b> {client} | <b>Due:</b> {due} | <b>Target Desk:</b> {desk}</p>
-    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
-        <thead><tr><th>Item</th><th>Qty</th><th>Amount</th></tr></thead>
-        <tbody>{rows}</tbody>
-    </table>
-    <h3>Total: ₹ {total:,.2f}</h3>
-    """
-    send_email(f"New Order #{job_no} - {client}", html)
-
-
-def send_daily_jobsheet_digest(recipient_email=None):
-    """Compiles all jobsheets logged/updated today into a table and emails them."""
+def send_daily_jobsheet_digest(recipient_email: str = None) -> tuple[bool, str]:
+    """Compiles all jobsheets logged/updated today into an HTML table and emails them."""
     try:
         today_str = str(date.today())
         res = (
@@ -75,13 +70,18 @@ def send_daily_jobsheet_digest(recipient_email=None):
         )
         jobs = res.data or []
 
-        # Fallback to fetching all active jobs if created_at timestamp is null
         if not jobs:
-            fallback_res = supabase.table("jobs").select("*").order("job_id", desc=True).limit(20).execute()
+            fallback_res = (
+                supabase.table("jobs")
+                .select("*")
+                .order("job_id", desc=True)
+                .limit(25)
+                .execute()
+            )
             jobs = fallback_res.data or []
 
         if not jobs:
-            return False, "No jobsheets found to compile."
+            return False, "No jobs found in database to compile."
 
         rows_html = ""
         total_day_value = 0.0
@@ -104,31 +104,30 @@ def send_daily_jobsheet_digest(recipient_email=None):
             """
 
         html_content = f"""
-        <h3>📅 Daily Jobsheet Digest — {today_str}</h3>
-        <p>Total orders listed: <b>{len(jobs)}</b> | Total Value: <b>₹ {total_day_value:,.2f}</b></p>
-        <table style="width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 13px;">
-            <thead>
-                <tr style="background-color: #f2f2f2;">
-                    <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Job #</th>
-                    <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Client</th>
-                    <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Items</th>
-                    <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Current Stage</th>
-                    <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Due Date</th>
-                    <th style="padding: 8px; border: 1px solid #ddd; text-align: right;">Total Value</th>
-                </tr>
-            </thead>
-            <tbody>
-                {rows_html}
-            </tbody>
-        </table>
+        <div style="font-family: Arial, sans-serif; color: #1E293B;">
+            <h2 style="color: #E11D48; margin-bottom: 4px;">AdNet Operations Digest</h2>
+            <p style="margin-top: 0; color: #64748B;">Date: <b>{today_str}</b> | Total Floor Orders: <b>{len(jobs)}</b></p>
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 14px;">
+                <thead>
+                    <tr style="background-color: #F8FAFC; color: #475569; text-align: left;">
+                        <th style="padding: 8px; border: 1px solid #CBD5E1;">Job #</th>
+                        <th style="padding: 8px; border: 1px solid #CBD5E1;">Client</th>
+                        <th style="padding: 8px; border: 1px solid #CBD5E1;">Items & Description</th>
+                        <th style="padding: 8px; border: 1px solid #CBD5E1;">Stage</th>
+                        <th style="padding: 8px; border: 1px solid #CBD5E1;">Due Date</th>
+                        <th style="padding: 8px; border: 1px solid #CBD5E1; text-align: right;">Total Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows_html}
+                </tbody>
+            </table>
+            <h3 style="text-align: right; margin-top: 16px; color: #0F172A;">Total Value: ₹ {total_day_value:,.2f}</h3>
+        </div>
         """
 
-        target = recipient_email or DEFAULT_RECIPIENT
-        success = send_email(f"Daily Jobsheet Digest [{today_str}]", html_content, target)
-        if success:
-            return True, f"Digest sent successfully ({len(jobs)} jobs included)."
-        else:
-            return False, "SMTP configuration missing or mail server unreachable."
+        target = recipient_email or CEO_RECIPIENT
+        return send_email(f"AdNet Daily Jobsheet Digest [{today_str}]", html_content, target)
 
     except Exception as e:
-        return False, str(e)
+        return False, f"Digest compile error: {str(e)}"
