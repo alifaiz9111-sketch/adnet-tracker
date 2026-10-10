@@ -154,29 +154,37 @@ def render(user):
 
                                 # 2. Prepare payload matching active database columns
                                 d_name = runner_name.strip() if runner_name else None
-                                update_payload = {
+                                # Update jobs record
+                            update_payload = {
+                                "current_stage": "BILLING_REVIEW",
+                                "is_returned": False,
+                                "challan_no": auto_challan_no,
+                            }
+
+                            d_name = runner_name.strip() if runner_name else None
+                            if d_name:
+                                update_payload["dispatch_notes"] = f"Driver: {d_name}"
+                                update_payload["driver_name"] = d_name
+
+                            if challan_url:
+                                update_payload["challan_doc_url"] = challan_url
+                                update_payload["challan_image_url"] = challan_url
+
+                            if job_done_url:
+                                update_payload["proof_file_url"] = job_done_url
+                                update_payload["job_done_image_url"] = job_done_url
+
+                            try:
+                                supabase.table("jobs").update(update_payload).eq("job_id", int(job["job_id"])).execute()
+                            except Exception as db_err:
+                                # Fallback if extra image/driver columns are not yet recognized by PostgREST cache
+                                fallback_payload = {
                                     "current_stage": "BILLING_REVIEW",
                                     "is_returned": False,
-                                    "challan_no": auto_challan_no,
-                                    "dispatch_notes": f"Driver: {d_name}" if d_name else None,
-                                    "challan_image_url": challan_url,
-                                    "job_done_image_url": job_done_url,
-                                    "proof_file_url": job_done_url
+                                    "challan_no": auto_challan_no
                                 }
-
-                                res = supabase.table("jobs").update(update_payload).eq("job_id", int(job["job_id"])).execute()
-                                
-                                st.success(f"Job #{job.get('job_no')} passed to Billing Review.")
-                                st.rerun()
-                            except Exception as e:
-                                # Fallback if specific image/note columns do not exist yet in jobs table
-                                try:
-                                    basic_payload = {
-                                        "current_stage": "BILLING_REVIEW",
-                                        "is_returned": False,
-                                        "challan_no": auto_challan_no
-                                    }
-                                    supabase.table("jobs").update(basic_payload).eq("job_id", int(job["job_id"])).execute()
+                                supabase.table("jobs").update(fallback_payload).eq("job_id", int(job["job_id"])).execute()
+                                st.warning(f"Job moved to Billing Review, but column cache needs reload: {db_err}")
                                     st.warning(f"Job #{job.get('job_no')} moved to Billing Review, but check DB columns: {e}")
                                     st.rerun()
                                 except Exception as inner_e:
