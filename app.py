@@ -17,13 +17,11 @@ from modules import (
     mod_f_dispatch,
     mod_g_billing,
     manager_view,
-    ceo_admin,
-    vendor_dashboard,
-    customer_dashboard
+    ceo_admin
 )
 
 st.set_page_config(
-    page_title="AdNet Operations ERP",
+    page_title="AdNet Commercial Print & Sign Operations",
     page_icon="🖨️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -34,336 +32,172 @@ if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "user" not in st.session_state:
     st.session_state.user = None
-if "selected_customer" not in st.session_state:
-    st.session_state.selected_customer = None
-if "selected_vendor" not in st.session_state:
-    st.session_state.selected_vendor = None
 
 
-def inject_preadmin_dark_css():
-    """Applies Preadmin deep-navy sidebar styling with brand red accents."""
+def inject_custom_css():
+    """Injects CSS for blinking badges and queue counter boxes."""
     st.markdown("""
         <style>
-        /* Overall Sidebar Background */
-        section[data-testid="stSidebar"] {
-            background-color: #0B0F19 !important;
-            border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
-            padding-top: 1rem !important;
+        /* Blinking Animation */
+        @keyframes blinker {
+            50% { opacity: 0.15; }
         }
-
-        /* Top Brand Logo & Title */
-        .sidebar-brand {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 4px 10px 18px 10px;
-        }
-        .sidebar-brand-icon {
-            width: 32px;
-            height: 32px;
-            background: linear-gradient(135deg, #E11D48 0%, #BE123C 100%);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #FFFFFF;
+        .badge-new {
+            background-color: #ff2b2b;
+            color: #ffffff !important;
+            font-size: 10px;
             font-weight: 800;
-            font-size: 16px;
-            box-shadow: 0 2px 8px rgba(225, 29, 72, 0.4);
+            padding: 2px 6px;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+            animation: blinker 1s linear infinite;
+            margin-left: 6px;
+            vertical-align: middle;
+            display: inline-block;
         }
-        .sidebar-brand-text {
-            font-size: 20px;
-            font-weight: 800;
-            color: #FFFFFF;
-            letter-spacing: -0.5px;
-        }
-
-        /* Category / Section Headers */
-        .nav-category {
+        .badge-count {
+            background-color: #1f2937;
+            color: #38bdf8 !important;
             font-size: 11px;
             font-weight: 700;
-            color: #4B5563;
-            letter-spacing: 0.8px;
-            text-transform: uppercase;
-            margin: 18px 0 6px 12px;
+            padding: 2px 7px;
+            border-radius: 12px;
+            border: 1px solid #38bdf8;
+            margin-left: 6px;
+            vertical-align: middle;
+            display: inline-block;
         }
-
-        /* Sidebar Navigation Radio Buttons */
-        div[data-testid="stRadio"] {
-            background: transparent !important;
-        }
-        div[data-testid="stRadio"] > div {
-            gap: 3px !important;
-        }
-
-        /* Hide Native Radio Circle */
-        div[data-testid="stRadio"] label > div:first-child {
-            display: none !important;
-        }
-
-        /* Default Inactive Nav Item */
-        div[data-testid="stRadio"] label {
-            background-color: transparent !important;
-            padding: 10px 14px !important;
-            border-radius: 8px !important;
-            margin: 0 !important;
-            cursor: pointer !important;
-            transition: all 0.18s ease-in-out !important;
-            border: none !important;
-        }
+        /* Style radio labels to allow HTML tags */
         div[data-testid="stRadio"] label p {
-            color: #9CA3AF !important;
-            font-size: 13.5px !important;
-            font-weight: 500 !important;
-            margin: 0 !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: space-between !important;
-            width: 100% !important;
-        }
-
-        /* Hover State */
-        div[data-testid="stRadio"] label:hover {
-            background-color: rgba(255, 255, 255, 0.05) !important;
-        }
-        div[data-testid="stRadio"] label:hover p {
-            color: #FFFFFF !important;
-        }
-
-        /* BRAND RED ACTIVE SELECTED PILL */
-        div[data-testid="stRadio"] label:has(input:checked),
-        div[data-testid="stRadio"] label[data-checked="true"] {
-            background-color: #E11D48 !important;
-            box-shadow: 0 4px 14px rgba(225, 29, 72, 0.35) !important;
-        }
-        div[data-testid="stRadio"] label:has(input:checked) p,
-        div[data-testid="stRadio"] label[data-checked="true"] p {
-            color: #FFFFFF !important;
-            font-weight: 700 !important;
-        }
-
-        /* Action Buttons */
-        .sidebar-action-btn button {
-            background-color: rgba(255, 255, 255, 0.04) !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
-            color: #D1D5DB !important;
-            font-size: 12px !important;
-            border-radius: 8px !important;
-            margin-top: 4px;
-        }
-        .sidebar-action-btn button:hover {
-            background-color: rgba(225, 29, 72, 0.15) !important;
-            border-color: #E11D48 !important;
-            color: #FFFFFF !important;
+            display: inline !important;
         }
         </style>
     """, unsafe_allow_html=True)
-
-
-def render_signin_window():
-    """Centered floating card login screen matching JIDOX design reference."""
-    st.markdown("""
-        <style>
-        /* Hide sidebar on login screen */
-        section[data-testid="stSidebar"] {
-            display: none !important;
-        }
-        /* Style the card container */
-        div[data-testid="stForm"] {
-            border: 1px solid rgba(255, 255, 255, 0.12) !important;
-            border-radius: 12px !important;
-            background-color: #161B22 !important;
-            padding: 34px 26px !important;
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6) !important;
-        }
-        /* Custom Diamond Icon */
-        .login-brand-box {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        .login-diamond {
-            width: 18px;
-            height: 18px;
-            background: #E11D48;
-            transform: rotate(45deg);
-            border-radius: 3px;
-            display: inline-block;
-            margin-right: 8px;
-            vertical-align: middle;
-        }
-        .login-brand-title {
-            font-size: 22px;
-            font-weight: 800;
-            color: #FFFFFF !important;
-            display: inline-block;
-            vertical-align: middle;
-            letter-spacing: 0.5px;
-        }
-        .login-subtext {
-            font-size: 13px;
-            color: #8B949E !important;
-            margin-top: 6px;
-            line-height: 1.4;
-        }
-        /* Submit button: Brand Red */
-        div[data-testid="stForm"] button[kind="primary"] {
-            background-color: #E11D48 !important;
-            border: none !important;
-            color: #FFFFFF !important;
-            font-weight: 700 !important;
-            padding: 10px 0 !important;
-            border-radius: 6px !important;
-            margin-top: 10px !important;
-        }
-        div[data-testid="stForm"] button[kind="primary"]:hover {
-            background-color: #BE123C !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    _, col_card, _ = st.columns([1, 1.2, 1])
-
-    with col_card:
-        with st.form("login_form"):
-            st.markdown("""
-                <div class="login-brand-box">
-                    <div>
-                        <span class="login-diamond"></span>
-                        <span class="login-brand-title">ADNET ERP</span>
-                    </div>
-                    <div style="font-size: 18px; font-weight: 700; color: #FFFFFF; margin-top: 12px;">Sign In</div>
-                    <div class="login-subtext">
-                        Enter your credentials to access the floor management system.
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-
-            username = st.text_input("Username / Staff ID", placeholder="e.g. admin").strip()
-            password = st.text_input("Password / PIN", placeholder="••••••••", type="password").strip()
-
-            st.markdown("<br>", unsafe_allow_html=True)
-            submit = st.form_submit_button("Sign In", type="primary", use_container_width=True)
-
-            if submit:
-                if not (username and password):
-                    st.error("Please provide both username and password.")
-                else:
-                    user = authenticate_user(username, password)[cite: 16]
-                    if user:
-                        st.session_state.authenticated = True
-                        st.session_state.user = user
-                        log_audit(user["user_id"], "LOGIN", f"User {username} logged into system.")[cite: 16]
-                        st.rerun()
-                    else:
-                        st.error("Invalid credentials or deactivated account.")
-
-        st.markdown("""
-            <div style="text-align: center; font-size: 12px; color: #8B949E; margin-top: 16px;">
-                Need workstation access? Contact Administrator<br>
-                <span style="font-size: 11px; color: #4B5563;">2026 © AdNet Operations Systems</span>
-            </div>
-        """, unsafe_allow_html=True)
 
 
 def main():
-    inject_preadmin_dark_css()
+    inject_custom_css()
 
-    # --- RENDER SIGN-IN WINDOW IF NOT AUTHENTICATED ---
+    # Login Screen
     if not st.session_state.authenticated:
-        render_signin_window()
+        _, logo_col, _ = st.columns([1, 1.2, 1])
+        with logo_col:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            candidate_paths = [
+                os.path.join(base_dir, "assets", "logo.png"),
+                os.path.join(base_dir, "assets", "Logo.png"),
+                os.path.join(base_dir, "assets", "logo.PNG"),
+                os.path.join(base_dir, "logo.png"),
+            ]
+            resolved_logo = next((p for p in candidate_paths if os.path.exists(p)), None)
+
+            if resolved_logo:
+                st.image(resolved_logo, use_container_width=True)
+            else:
+                st.markdown("<h2 style='text-align: center;'>🖨️ AdNet Operations & Floor Management</h2>", unsafe_allow_html=True)
+
+        st.caption("<p style='text-align: center;'>Login with ID - Password</p>", unsafe_allow_html=True)
+
+        _, col, _ = st.columns([1, 1.5, 1])
+        with col:
+            with st.form("login_form"):
+                username = st.text_input("Username").strip()
+                password = st.text_input("Password / PIN", type="password").strip()
+                submit = st.form_submit_button("Sign In", type="primary", use_container_width=True)
+
+                if submit:
+                    user = authenticate_user(username, password)
+                    if user:
+                        st.session_state.authenticated = True
+                        st.session_state.user = user
+                        log_audit(user["user_id"], "LOGIN", f"User {username} logged into system.")
+                        st.rerun()
+                    else:
+                        st.error("Invalid credentials or deactivated account.")
         return
 
-    # --- LOGGED IN STATE ---
+    # Logged In State
     current_user = st.session_state.user
-    account_type = current_user.get("account_type", "STAFF")[cite: 20]
-    user_perms = current_user.get("permissions") or [][cite: 20]
+    account_type = current_user.get("account_type", "STAFF")
+    user_perms = current_user.get("permissions") or []
 
-    p_counts = get_station_pending_counts()[cite: 20]
+    # Pull real-time queue counts
+    p_counts = get_station_pending_counts()
 
-    # --- SIDEBAR (PREADMIN DARK STYLE) ---
+    # Sidebar Navigation
     with st.sidebar:
-        # 1. Top Brand Icon & Title
-        st.markdown("""
-            <div class="sidebar-brand">
-                <div class="sidebar-brand-icon">A</div>
-                <div class="sidebar-brand-text">AdNet ERP</div>
-            </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"### 👤 {current_user['full_name']}")
+        st.caption(f"Role: `{account_type}` | `@{current_user['username']}`")
+        if current_user.get("primary_station"):
+            st.caption(f"Station: `{current_user['primary_station']}`")
 
-        # 2. Email Digest Trigger Button
-        st.markdown('<div class="sidebar-action-btn">', unsafe_allow_html=True)
-        if st.button("✉️ Mail Today's Jobsheet", use_container_width=True):
-            with st.spinner("Dispatching summary..."):
+        st.markdown("---")
+
+        # --- BUTTON: MAIL TODAY'S JOBSHEET (ABOVE WORKSPACES) ---
+        if st.button("📧 Mail Today's Jobsheet", use_container_width=True, type="secondary"):
+            with st.spinner("Compiling and sending today's jobsheets..."):
                 try:
-                    from email_service import send_daily_jobsheet_digest[cite: 20]
-                    recipient = current_user.get("email")[cite: 20]
-                    ok, res_msg = send_daily_jobsheet_digest(recipient_email=recipient)[cite: 20]
+                    from email_service import send_daily_jobsheet_digest
+                    recipient = current_user.get("email")
+                    ok, res_msg = send_daily_jobsheet_digest(recipient_email=recipient)
                     if ok:
-                        st.toast(f"✅ {res_msg}", icon="📧")[cite: 20]
+                        st.toast(f"✅ {res_msg}", icon="📧")
                     else:
-                        st.warning(res_msg)[cite: 20]
+                        st.warning(res_msg)
                 except Exception as ex:
-                    st.error(f"Failed to send email: {ex}")[cite: 20]
-        st.markdown('</div>', unsafe_allow_html=True)
+                    st.error(f"Failed to send email: {ex}")
+
+        st.markdown("### 📂 Workspaces")
 
         menu_config = []
 
-        def make_station_label(title: str, count: int = 0) -> str:
+        # Helper to construct label with badge count and blinking NEW tag
+        def make_station_label(title, count=0):
             if count > 0:
-                return f"{title}  ({count})"
+                return f"{title} [{count}] 🔥NEW"
             return title
 
-        # --- SECTION: MANAGEMENT ---
-        if account_type in ["SUPER_ADMIN", "CEO", "MANAGER"]:[cite: 20]
-            st.markdown('<div class="nav-category">MANAGEMENT</div>', unsafe_allow_html=True)
-            
-            if account_type in ["SUPER_ADMIN", "CEO"]:[cite: 20]
-                del_count = p_counts.get("DELETION_REQS", 0)[cite: 20]
-                lbl_exec = make_station_label("👑 Executive Overview", del_count)[cite: 20]
-                menu_config.append(("EXEC_OVERVIEW", lbl_exec, ceo_admin.render_overview))[cite: 20]
-                menu_config.append(("EXEC_RBAC", "👥 Staff & RBAC Admin", ceo_admin.render_user_management))[cite: 20]
+        # Executive Desks
+        if account_type in ["SUPER_ADMIN", "CEO"]:
+            del_count = p_counts.get("DELETION_REQS", 0)
+            lbl_exec = make_station_label("👑 Executive Floor KPI Overview", del_count)
+            menu_config.append(("EXEC_OVERVIEW", lbl_exec, ceo_admin.render_overview))
+            menu_config.append(("EXEC_RBAC", "👥 Staff & RBAC Admin", ceo_admin.render_user_management))
 
-            menu_config.append(("MGR_TRACK", "🔍 Floor Track & Audit", manager_view.render))[cite: 20]
+        # Manager Track & Audit
+        if account_type in ["MANAGER", "SUPER_ADMIN", "CEO"]:
+            menu_config.append(("MGR_TRACK", "🔍 Manager Track & Audit", manager_view.render))
 
-        # --- SECTION: OPERATIONS FLOOR ---
-        st.markdown('<div class="nav-category">OPERATIONS</div>', unsafe_allow_html=True)
+        # Workstation Modules with Pending Counters
+        if "MOD_A" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
+            menu_config.append(("MOD_A", "📝 1. Order Intake (Sales)", mod_a_sales.render))
 
-        if "MOD_A" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:[cite: 20]
-            menu_config.append(("MOD_A", "📝 Order Intake (Sales)", mod_a_sales.render))[cite: 20]
+        if "MOD_B" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
+            c_b = p_counts.get("DESIGN", 0)
+            menu_config.append(("MOD_B", make_station_label("🎨 2. Design & Proofs", c_b), mod_b_design.render))
 
-        if "MOD_B" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:[cite: 20]
-            c_b = p_counts.get("DESIGN", 0)[cite: 20]
-            menu_config.append(("MOD_B", make_station_label("🎨 Design & Proofs", c_b), mod_b_design.render))[cite: 20]
+        if "MOD_C" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
+            c_c = p_counts.get("PAYMENT", 0)
+            menu_config.append(("MOD_C", make_station_label("💳 3. Advance / Accounts Clearance", c_c), mod_c_payment.render))
 
-        if "MOD_C" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:[cite: 20]
-            c_c = p_counts.get("PAYMENT", 0)[cite: 20]
-            menu_config.append(("MOD_C", make_station_label("💳 Accounts Clearance", c_c), mod_c_payment.render))[cite: 20]
+        if "MOD_D" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
+            c_d = p_counts.get("PRODUCTION", 0)
+            menu_config.append(("MOD_D", make_station_label("⚙️ 4. Production Floor", c_d), mod_d_production.render))
 
-        if "MOD_D" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:[cite: 20]
-            c_d = p_counts.get("PRODUCTION", 0)[cite: 20]
-            menu_config.append(("MOD_D", make_station_label("⚙️ Production Floor", c_d), mod_d_production.render))[cite: 20]
+        if "MOD_E" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
+            c_e = p_counts.get("QC", 0)
+            menu_config.append(("MOD_E", make_station_label("🔍 5. Quality Check (QC)", c_e), mod_e_qc.render))
 
-        if "MOD_E" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:[cite: 20]
-            c_e = p_counts.get("QC", 0)[cite: 20]
-            menu_config.append(("MOD_E", make_station_label("🔍 Quality Check (QC)", c_e), mod_e_qc.render))[cite: 20]
+        if "MOD_F" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
+            c_f = p_counts.get("DISPATCH", 0)
+            menu_config.append(("MOD_F", make_station_label("🚚 6. Dispatch & Field Delivery", c_f), mod_f_dispatch.render))
 
-        if "MOD_F" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:[cite: 20]
-            c_f = p_counts.get("DISPATCH", 0)[cite: 20]
-            menu_config.append(("MOD_F", make_station_label("🚚 Dispatch & Delivery", c_f), mod_f_dispatch.render))[cite: 20]
-
-        if "MOD_G" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:[cite: 20]
-            c_g = p_counts.get("BILLING", 0)[cite: 20]
-            menu_config.append(("MOD_G", make_station_label("🧾 Billing & Invoicing", c_g), mod_g_billing.render))[cite: 20]
-
-        # --- SECTION: DIRECTORIES ---
-        if account_type in ["SUPER_ADMIN", "CEO", "MANAGER"] or user_perms:[cite: 20]
-            st.markdown('<div class="nav-category">DIRECTORIES</div>', unsafe_allow_html=True)
-            menu_config.append(("CUSTOMERS", "🏢 Customers Directory", customer_dashboard.render))[cite: 20]
-            menu_config.append(("VENDORS", "🏭 Vendors & Outsource", vendor_dashboard.render))[cite: 20]
+        if "MOD_G" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
+            c_g = p_counts.get("BILLING", 0)
+            menu_config.append(("MOD_G", make_station_label("🧾 7. Billing & Invoicing Desk", c_g), mod_g_billing.render))
 
         if not menu_config:
-            st.warning("No active permissions assigned.")
+            st.warning("No active module permissions assigned. Please contact the administrator.")
             selected_key = None
         else:
             keys = [item[0] for item in menu_config]
@@ -373,41 +207,36 @@ def main():
             selected_key = st.radio(
                 "Navigate Station",
                 options=keys,
-                format_func=lambda k: labels_map[k],
-                label_visibility="collapsed"
+                format_func=lambda k: labels_map[k]
             )
 
-        # --- SECTION: SETTINGS & USER FOOTER ---
-        st.markdown('<div class="nav-category">SETTINGS</div>', unsafe_allow_html=True)
+        st.markdown("---")
+        with st.popover("🔑 Change Password", use_container_width=True):
+            st.markdown("#### Update Password / PIN")
+            old_p = st.text_input("Current Password *", type="password", key="chg_old_pwd").strip()
+            new_p = st.text_input("New Password *", type="password", key="chg_new_pwd").strip()
+            conf_p = st.text_input("Confirm New Password *", type="password", key="chg_conf_pwd").strip()
 
-        with st.popover("⚙️ Settings & PIN", use_container_width=True):
-            st.markdown("#### Change Password / PIN")
-            old_p = st.text_input("Current PIN *", type="password", key="chg_old_pwd").strip()
-            new_p = st.text_input("New PIN *", type="password", key="chg_new_pwd").strip()
-            conf_p = st.text_input("Confirm PIN *", type="password", key="chg_conf_pwd").strip()
-
-            if st.button("Update PIN", type="primary", use_container_width=True, key="btn_update_pwd"):
+            if st.button("Update Password", type="primary", use_container_width=True, key="btn_update_pwd"):
                 if not (old_p and new_p and conf_p):
-                    st.error("Please fill in all fields.")
+                    st.error("Please fill in all password fields.")
                 elif new_p != conf_p:
-                    st.error("PINs do not match.")
+                    st.error("New password and confirmation do not match.")
                 elif len(new_p) < 4:
-                    st.error("Minimum 4 characters required.")
+                    st.error("Password must be at least 4 characters long.")
                 else:
-                    ok, msg = update_user_password(current_user["user_id"], old_p, new_p)[cite: 16]
+                    ok, msg = update_user_password(current_user["user_id"], old_p, new_p)
                     if ok:
                         st.success(msg)
                     else:
                         st.error(msg)
 
-        if st.button("🚪 Logout", use_container_width=True):[cite: 20]
-            st.session_state.authenticated = False[cite: 20]
-            st.session_state.user = None[cite: 20]
-            st.session_state.selected_customer = None
-            st.session_state.selected_vendor = None
-            st.rerun()[cite: 20]
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.authenticated = False
+            st.session_state.user = None
+            st.rerun()
 
-    # --- RENDER DESK SCREEN ---
+    # Render Active Station Screen
     if selected_key and selected_key in handlers_map:
         handlers_map[selected_key](current_user)
 
