@@ -1,5 +1,11 @@
 import streamlit as st
-from database import supabase, get_job_items, get_all_vendors
+from database import (
+    supabase, 
+    get_job_items, 
+    get_all_vendors, 
+    get_custom_presets, 
+    add_custom_preset
+)
 
 def render(user):
     st.subheader("⚙️ Module 4: Production Floor & Fabrication Desk")
@@ -130,10 +136,19 @@ def render(user):
                 v_names = [v.get("vendor_name", "Vendor") for v in vendors if v.get("is_active", True)] or ["General Vendor"]
                 v_selected = st.selectbox("Vendor Name", options=v_names, key=f"s2_vnd_{jid}")
 
-                job_item_opts = [it.get("item_name", "Item") for it in items] + ["NEW"]
-                v_job = st.selectbox("Job", options=job_item_opts, key=f"s2_job_{jid}")
+                # Dynamically load base items + saved custom presets
+                saved_v_jobs = get_custom_presets("VENDOR_JOB")
+                base_item_opts = [it.get("item_name", "").strip() for it in items if it.get("item_name")]
+                combined_jobs = sorted(list(set(base_item_opts + saved_v_jobs))) + ["NEW"]
+
+                v_job = st.selectbox("Job", options=combined_jobs, key=f"s2_job_{jid}")
+                chosen_job_name = v_job
+
                 if v_job == "NEW":
-                    new_v_job = st.text_input("Add NEW JOB Details *", placeholder="Enter custom job name...", key=f"s2_new_job_{jid}")
+                    new_v_job = st.text_input("Add NEW JOB Details *", placeholder="Enter custom job name...", key=f"s2_new_job_{jid}").strip()
+                    if new_v_job:
+                        chosen_job_name = new_v_job
+                        add_custom_preset("VENDOR_JOB", new_v_job)
 
                 st.markdown("##### Size: W × B × H")
                 sz_c1, sz_c2, sz_c3, sz_c4 = st.columns(4)
@@ -169,18 +184,26 @@ def render(user):
             elif curr_step == 3:
                 st.markdown("#### 📄 Section 3: Paper Fabrications")
 
-                fab_presets = [
+                # Base fabrications + saved custom presets
+                default_fabs = [
                     "Cardboard Mounting",
                     "Foam Board Pasting",
                     "Matte Lamination",
                     "Gloss Lamination",
                     "Die-Punching & Creasing",
-                    "Binding & Eyeletting",
-                    "NEW"
+                    "Binding & Eyeletting"
                 ]
-                fab_choice = st.selectbox("Paper Fabrications", options=fab_presets, key=f"s3_fab_{jid}")
+                saved_fabs = get_custom_presets("FABRICATION")
+                combined_fabs = sorted(list(set(default_fabs + saved_fabs))) + ["NEW"]
+
+                fab_choice = st.selectbox("Paper Fabrications", options=combined_fabs, key=f"s3_fab_{jid}")
+                chosen_fab_name = fab_choice
+
                 if fab_choice == "NEW":
-                    new_fab_job = st.text_input("Add NEW JOB Details *", placeholder="Enter fabrication description...", key=f"s3_new_fab_{jid}")
+                    new_fab_job = st.text_input("Add NEW JOB Details *", placeholder="Enter fabrication description...", key=f"s3_new_fab_{jid}").strip()
+                    if new_fab_job:
+                        chosen_fab_name = new_fab_job
+                        add_custom_preset("FABRICATION", new_fab_job)
 
                 st.markdown("##### Size: W × B × H")
                 sz3_1, sz3_2, sz3_3, sz3_4 = st.columns(4)

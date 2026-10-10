@@ -451,3 +451,25 @@ def get_station_pending_counts():
     except Exception:
         pass
     return counts
+
+def get_custom_presets(preset_type: str) -> list:
+    """Fetch all saved custom presets for dynamic dropdowns."""
+    try:
+        res = supabase.table("custom_presets").select("preset_name").eq("preset_type", preset_type).execute()
+        return [r["preset_name"] for r in (res.data or []) if r.get("preset_name")]
+    except Exception:
+        return []
+
+def add_custom_preset(preset_type: str, preset_name: str) -> bool:
+    """Inserts a new item/job/fabrication name so it appears in future dropdowns."""
+    p_clean = preset_name.strip()
+    if not p_clean or p_clean.upper() == "NEW":
+        return False
+    try:
+        supabase.table("custom_presets").upsert({
+            "preset_type": preset_type,
+            "preset_name": p_clean
+        }, on_conflict="preset_name").execute()
+        return True
+    except Exception:
+        return False
