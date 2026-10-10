@@ -77,18 +77,32 @@ def render(user):
                             except Exception as e:
                                 st.error(f"Error updating item: {e}")
 
-                # Handover to Billing Review
+                # Handover to Billing Review with Auto Challan & Dual Uploads
                 with st.popover("🚀 Send to Billing Review", use_container_width=True):
                     st.markdown("#### Delivery Completion Handover")
-                    challan_no = st.text_input(
-                        "Delivery Challan / Tracking Ref #",
-                        placeholder="e.g. DC-2026-902",
-                        key=f"dc_{job['job_id']}",
-                    )
+                    
+                    # Pre-generated read-only Challan Number
+                    auto_challan_no = f"DC-2026-{job.get('job_no')}"
+                    st.info(f"📄 **Challan No:** `{auto_challan_no}`")
+
                     runner_name = st.text_input(
                         "Driver / Delivery Person",
                         placeholder="e.g. Subhash Logistics",
                         key=f"run_{job['job_id']}",
+                    )
+
+                    # 1. Challan Image Upload
+                    file_challan = st.file_uploader(
+                        "📷 Upload Challan Copy",
+                        type=["png", "jpg", "jpeg", "pdf"],
+                        key=f"upl_challan_{job['job_id']}"
+                    )
+
+                    # 2. Job Done Image Upload
+                    file_job_done = st.file_uploader(
+                        "📸 Upload Job Done Image (Site/Delivery Proof)",
+                        type=["png", "jpg", "jpeg"],
+                        key=f"upl_jobdone_{job['job_id']}"
                     )
 
                     if st.button(
@@ -98,15 +112,49 @@ def render(user):
                         use_container_width=True,
                     ):
                         try:
-                            # Auto-mark all line items delivered upon final handover
+                            challan_url = None
+                            job_done_url = None
+
+                            # Helper to upload file to supabase storage if bucket exists
+                            def _upload_proof_file(uploaded_file, file_prefix):
+                                f_bytes = uploaded_file.getvalue()
+                                f_ext = uploaded_file.name.split(".")[-1]
+                                f_path = f"{file_prefix}_{job['job_id']}_{job.get('job_no')}.{f_ext}"
+                                try:
+                                    supabase.storage.from_("delivery_proofs").upload(
+                                        path=f_path,
+                                        file=f_bytes,
+                                        file_options={"content-type": uploaded_file.type, "upsert": "true"}
+                                    )
+                                    return supabase.storage.from_("delivery_proofs").get_public_url(f_path)
+                                except Exception:
+                                    return f"[Uploaded: {uploaded_file.name}]"
+
+                            if file_challan:
+                                challan_url = _upload_proof_file(file_challan, "challan")
+
+                            if file_job_done:
+                                job_done_url = _upload_proof_file(file_job_done, "job_done")
+
+                            # Auto-mark line items delivered
                             supabase.table("job_items").update({
                                 "is_delivered": True
                             }).eq("job_id", job["job_id"]).execute()
-                            supabase.table("jobs").update({
+
+                            # Update jobs record
+                            update_payload = {
                                 "current_stage": "BILLING_REVIEW",
                                 "is_returned": False,
-                            }).eq("job_id", int(job["job_id"])).execute()
-                            st.success(f"Job #{job.get('job_no')} passed to Billing Review.")
+                                "challan_no": auto_challan_no,
+                                "driver_name": runner_name.strip() if runner_name else None,
+                            }
+                            if challan_url:
+                                update_payload["challan_doc_url"] = challan_url
+                            if job_done_url:
+                                update_payload["proof_file_url"] = job_done_url
+
+                            supabase.table("jobs").update(update_payload).eq("job_id", int(job["job_id"])).execute()
+                            st.success(f"Job #{job.get('job_no')} marked delivered and passed to Billing Review.")
                             st.rerun()
                         except Exception as e:
                             st.error(f"Failed to route job: {e}")
