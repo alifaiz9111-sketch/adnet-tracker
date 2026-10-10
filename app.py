@@ -205,10 +205,6 @@ def main():
             c_g = p_counts.get("BILLING", 0)
             menu_config.append(("MOD_G", make_station_label("🧾 7. Billing & Invoicing Desk", c_g), mod_g_billing.render))
 
-        if "MOD_G" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
-            c_g = p_counts.get("BILLING", 0)
-            menu_config.append(("MOD_G", make_station_label("🧾 7. Billing & Invoicing Desk", c_g), mod_g_billing.render))
-
         # --- MODULE 8: CA & GST AUDIT DESK ---
         if "MOD_CA" in user_perms or account_type in ["SUPER_ADMIN", "CEO", "MANAGER", "STAFF"]:
             menu_config.append(("CA_AUDIT", "🏛️ 8. CA & GST Audit Desk", mod_ca_audit.render))
