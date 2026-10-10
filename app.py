@@ -16,7 +16,9 @@ from modules import (
     mod_e_qc,
     mod_f_dispatch,
     mod_g_billing,
+    mod_ca_audit,
     manager_view,
+    customer_dashboard,
     ceo_admin
 )
 
@@ -174,6 +176,7 @@ def main():
         # Manager Track & Audit
         if account_type in ["MANAGER", "SUPER_ADMIN", "CEO"]:
             menu_config.append(("MGR_TRACK", "🔍 Manager Track & Audit", manager_view.render))
+            menu_config.append(("CA_AUDIT", "🏛️ CA & GST Audit Desk", mod_ca_audit.render))
 
         # Workstation Modules with Pending Counters
         if "MOD_A" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
