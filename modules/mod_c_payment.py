@@ -120,9 +120,17 @@ def render(user):
 
             # 3. Payment Entry Inputs & Live Balance Calculator
             st.markdown("##### 💵 Payment Entry & Commercial Clearance")
-            p_c1, p_c2, p_c3, p_c4 = st.columns(4)
+            p_c1, p_c2, p_c3, p_c4, p_c5 = st.columns(5)
 
             with p_c1:
+                po_number = st.text_input(
+                    "Client P.O. No. (Optional)",
+                    value=job.get("po_no") or "",
+                    placeholder="e.g. PO/2026/8941",
+                    key=f"po_{job_id}"
+                ).strip()
+
+            with p_c2:
                 adv_amt = st.number_input(
                     "Advance Amount Received (₹)",
                     min_value=0.0,
@@ -132,21 +140,21 @@ def render(user):
                     key=f"adv_{job_id}"
                 )
 
-            with p_c2:
+            with p_c3:
                 pay_mode = st.selectbox(
                     "Payment Mode *",
                     ["UPI", "NEFT/RTGS", "Cheque", "Cash", "Bank Transfer"],
                     key=f"mode_{job_id}"
                 )
 
-            with p_c3:
+            with p_c4:
                 ref_no = st.text_input(
-                    "Transaction / Ref No. (Optional)",
-                    placeholder="e.g. UTR / Cheque / UPI Ref",
+                    "Transaction / Ref No.",
+                    placeholder="e.g. UTR / Cheque / Ref",
                     key=f"ref_{job_id}"
                 )
 
-            with p_c4:
+            with p_c5:
                 pay_date = st.date_input(
                     "Payment Date",
                     value=date.today(),
@@ -171,6 +179,9 @@ def render(user):
             b_c1, b_c2 = st.columns(2)
             with b_c1:
                 if st.button("🚀 Clear & Release to Production", key=f"btn_rel_{job_id}", type="primary", use_container_width=True):
+                    if po_number:
+                        supabase.table("jobs").update({"po_no": po_number}).eq("job_id", job_id).execute()
+
                     ok, msg = record_payment_and_release(
                         job_id=job_id,
                         user_name=user["full_name"],
@@ -190,6 +201,9 @@ def render(user):
 
             with b_c2:
                 if st.button("📑 Approve on Credit (Zero Advance)", key=f"btn_crd_{job_id}", use_container_width=True):
+                    if po_number:
+                        supabase.table("jobs").update({"po_no": po_number}).eq("job_id", job_id).execute()
+
                     ok, msg = record_payment_and_release(
                         job_id=job_id,
                         user_name=user["full_name"],
