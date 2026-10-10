@@ -87,13 +87,24 @@ def render(user):
 
         with st.container(border=True):
             st.markdown("#### 1. Client & Commercial Header")
+            
+            # Side-by-side selection for Billing Type
+            billing_choice = st.radio(
+                "Billing Classification *",
+                options=["Non-GST Bill", "GST Invoice (B2B Tax Invoice)"],
+                index=0,
+                horizontal=True,
+                key="s_billing_mode"
+            )
+            is_gst = "GST Invoice" in billing_choice
+
             c1, c2, c3 = st.columns(3)
             with c1:
                 job_no = st.text_input("Jobsheet Number *", value=suggested_no, key="s_job_no").strip()
                 client_name = st.text_input("Client / Corporate Entity *", placeholder="e.g. Apollo Hospitals", key="s_client").strip()
             with c2:
-                contact_person = st.text_input("Contact Person *", placeholder="e.g. Amitava Ghosh", key="s_contact").strip()
-                contact_phone = st.text_input("Mobile / Contact Number *", placeholder="e.g. 9830112233", key="s_phone").strip()
+                contact_person = st.text_input("Contact Person", placeholder="e.g. Amitava Ghosh", key="s_contact").strip()
+                contact_phone = st.text_input("Mobile / Contact Number", placeholder="e.g. 9830112233", key="s_phone").strip()
             with c3:
                 due_date = st.date_input("Target Delivery Date *", min_value=date.today(), key="s_due")
                 routed_desk = st.selectbox(
@@ -107,6 +118,34 @@ def render(user):
                     key="s_route",
                 )
 
+            # Conditional GST Compliance Details
+            gstin = ""
+            billing_address = ""
+            place_of_supply = "19 - West Bengal"
+
+            if is_gst:
+                st.markdown("##### 🏛️ GST Compliance Information")
+                gc1, gc2, gc3 = st.columns([1.5, 1.5, 3])
+                with gc1:
+                    gstin = st.text_input("Client GSTIN *", placeholder="e.g. 19AAAAA0000A1Z5", key="s_gstin").strip().upper()
+                with gc2:
+                    place_of_supply = st.selectbox(
+                        "Place of Supply (State) *",
+                        options=[
+                            "19 - West Bengal",
+                            "10 - Bihar",
+                            "20 - Jharkhand",
+                            "21 - Odisha",
+                            "18 - Assam",
+                            "07 - Delhi",
+                            "27 - Maharashtra",
+                            "Other State"
+                        ],
+                        key="s_pos"
+                    )
+                with gc3:
+                    billing_address = st.text_input("Registered GST Billing Address *", placeholder="e.g. 12/A Park Street, Kolkata - 700016", key="s_baddr").strip()
+
             # Designer Assignment option if routed to DESIGN
             target_designer = "OPEN_POOL"
             if routed_desk == "DESIGN":
@@ -114,7 +153,6 @@ def render(user):
                 des_options = ["📢 Broadcast to All Designers (Open Claim)"] + [f"{d['full_name']} (@{d['username']})" for d in designers_list]
                 chosen = st.selectbox("Assign Designer *", options=des_options, key="s_des_choice")
                 if "📢" not in chosen:
-                    # extract full name
                     target_designer = chosen.split(" (@")[0].strip()
 
         st.markdown("---")
@@ -268,6 +306,10 @@ def render(user):
                 if not c_name:
                     missing.append("Client / Corporate Entity")
                 st.error(f"Please fill in mandatory field(s): {', '.join(missing)}")
+            elif is_gst and (not gstin or len(gstin) < 15):
+                st.error("Please provide a valid 15-character GSTIN for GST Tax Invoices.")
+            elif is_gst and not billing_address:
+                st.error("Registered Billing Address is required for GST Tax Invoices.")
             elif any(not it.get("item_name", "").strip() for it in st.session_state.sales_items):
                 st.error("Please ensure every added line item has a valid name.")
             else:
@@ -281,7 +323,10 @@ def render(user):
                     "current_stage": routed_desk,
                     "assigned_designer": target_designer if routed_desk == "DESIGN" else None,
                     "is_returned": False,
-                    "billing_type": "NON_GST",
+                    "billing_type": "GST" if is_gst else "NON_GST",
+                    "gstin": gstin if is_gst else None,
+                    "billing_address": billing_address if is_gst else None,
+                    "place_of_supply": place_of_supply if is_gst else None,
                     "is_billed": False,
                 }
 
@@ -413,7 +458,8 @@ def render(user):
                 with st.container(border=True):
                     c1, c2, c3 = st.columns([2.5, 2, 1.5])
                     with c1:
-                        st.markdown(f"**Job #{j.get('job_no')} — {j.get('client_name')}**")
+                        btype_badge = "🏛️ GST" if j.get("billing_type") == "GST" else "📄 Non-GST"
+                        st.markdown(f"**Job #{j.get('job_no')} — {j.get('client_name')}** ({btype_badge})")
                         st.caption(f"Contact: `{j.get('contact_person') or 'N/A'}` | 📱 `{j.get('contact_phone') or 'N/A'}`")
                         st.caption(f"Due: `{j.get('due_date')}` | Stage: `{j.get('current_stage')}`")
                         des_label = j.get("assigned_designer") or "None"
@@ -458,6 +504,20 @@ def render(user):
                                 d_idx = d_names.index(cur_des) if cur_des in d_names else 0
                                 ed_designer = st.selectbox("Assigned Designer", options=d_names, index=d_idx, key=f"ed_des_{j['job_id']}")
 
+                                # Edit GST details
+                                is_currently_gst = j.get("billing_type") == "GST"
+                                ed_is_gst = st.checkbox("GST Tax Invoice Billing", value=is_currently_gst, key=f"ed_isgst_{j['job_id']}")
+                                ed_gstin = j.get("gstin", "") or ""
+                                ed_baddr = j.get("billing_address", "") or ""
+                                ed_pos = j.get("place_of_supply", "19 - West Bengal") or "19 - West Bengal"
+
+                                if ed_is_gst:
+                                    ed_gstin = st.text_input("Client GSTIN", value=ed_gstin, key=f"ed_gstin_{j['job_id']}").strip().upper()
+                                    ed_baddr = st.text_input("Billing Address", value=ed_baddr, key=f"ed_baddr_{j['job_id']}").strip()
+                                    pos_opts = ["19 - West Bengal", "10 - Bihar", "20 - Jharkhand", "21 - Odisha", "18 - Assam", "07 - Delhi", "27 - Maharashtra", "Other State"]
+                                    pos_idx = pos_opts.index(ed_pos) if ed_pos in pos_opts else 0
+                                    ed_pos = st.selectbox("Place of Supply", pos_opts, index=pos_idx, key=f"ed_pos_{j['job_id']}")
+
                                 st.markdown("---")
                                 st.markdown("##### Line Items")
                                 edited_items = []
@@ -487,6 +547,10 @@ def render(user):
                                         "due_date": str(ed_due),
                                         "current_stage": ed_stage,
                                         "assigned_designer": ed_designer,
+                                        "billing_type": "GST" if ed_is_gst else "NON_GST",
+                                        "gstin": ed_gstin if ed_is_gst else None,
+                                        "billing_address": ed_baddr if ed_is_gst else None,
+                                        "place_of_supply": ed_pos if ed_is_gst else None,
                                     }
                                     ok, upd_msg = update_job_sheet_by_management(j["job_id"], h_payload, edited_items)
                                     if ok:
