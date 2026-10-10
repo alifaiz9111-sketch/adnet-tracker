@@ -322,47 +322,70 @@ def render(user):
         my_jobs = get_user_created_jobs(user["full_name"], is_management=is_management)
 
         # --- DYNAMIC SEARCHABLE DROPDOWN FILTER BAR ---
-        st.markdown("##### 🔍 Search & Filter Orders")
+        with st.container(border=True):
+            st.markdown("#### 🔍 Filter & Search Orders")
+            
+            # CSS safeguard to ensure selectbox dropdowns and labels render visibly
+            st.markdown("""
+                <style>
+                div[data-baseweb="select"] {
+                    background-color: #161B22 !important;
+                    border-radius: 6px !important;
+                }
+                div[data-baseweb="select"] * {
+                    color: #FFFFFF !important;
+                }
+                </style>
+            """, unsafe_allow_html=True)
 
-        # Distinct sorted values for auto-complete dropdowns
-        opt_job_nos = ["All"] + sorted(list({str(j.get("job_no")) for j in my_jobs if j.get("job_no")}))
-        opt_clients = ["All"] + sorted(list({str(j.get("client_name")).strip() for j in my_jobs if j.get("client_name")}))
-        opt_contacts = ["All"] + sorted(list({str(j.get("contact_person")).strip() for j in my_jobs if j.get("contact_person")}))
-        opt_phones = ["All"] + sorted(list({str(j.get("contact_phone")).strip() for j in my_jobs if j.get("contact_phone")}))
-        opt_due_dates = ["All"] + sorted(list({str(j.get("due_date")) for j in my_jobs if j.get("due_date")}))
-        opt_depts = ["All Departments", "DESIGN", "PAYMENT", "PRODUCTION", "QC", "DISPATCH", "BILLING", "SETTLED"]
-        opt_designers = ["All"] + sorted(list({str(j.get("assigned_designer")).strip() for j in my_jobs if j.get("assigned_designer")}))
+            jobs_source = my_jobs or []
 
-        sf_c1, sf_c2, sf_c3 = st.columns(3)
-        with sf_c1:
-            f_job_no = st.selectbox("Jobsheet Number", options=opt_job_nos, key="sales_f_jno")
-            f_client = st.selectbox("Client / Corporate Entity", options=opt_clients, key="sales_f_client")
-            f_due_date = st.selectbox("Target Delivery Date", options=opt_due_dates, key="sales_f_due")
+            # Populate distinct options
+            opt_job_nos = ["All"] + sorted(list({str(j.get("job_no")) for j in jobs_source if j.get("job_no")}))
+            opt_clients = ["All"] + sorted(list({str(j.get("client_name")).strip() for j in jobs_source if j.get("client_name")}))
+            opt_contacts = ["All"] + sorted(list({str(j.get("contact_person")).strip() for j in jobs_source if j.get("contact_person")}))
+            opt_phones = ["All"] + sorted(list({str(j.get("contact_phone")).strip() for j in jobs_source if j.get("contact_phone")}))
+            opt_due_dates = ["All"] + sorted(list({str(j.get("due_date")) for j in jobs_source if j.get("due_date")}))
+            opt_depts = ["All Departments", "DESIGN", "PAYMENT", "PRODUCTION", "QC", "DISPATCH", "BILLING", "SETTLED"]
+            opt_designers = ["All"] + sorted(list({str(j.get("assigned_designer")).strip() for j in jobs_source if j.get("assigned_designer")}))
 
-        with sf_c2:
-            f_contact = st.selectbox("Contact Person", options=opt_contacts, key="sales_f_contact")
-            f_phone = st.selectbox("Mobile / Contact Number", options=opt_phones, key="sales_f_phone")
+            sf_c1, sf_c2, sf_c3 = st.columns(3)
+            with sf_c1:
+                f_job_no = st.selectbox("Jobsheet Number", options=opt_job_nos, index=0, key="sf_drp_jno")
+                f_client = st.selectbox("Client / Corporate Entity", options=opt_clients, index=0, key="sf_drp_cli")
+                f_due_date = st.selectbox("Target Delivery Date", options=opt_due_dates, index=0, key="sf_drp_due")
 
-        with sf_c3:
-            f_dept = st.selectbox("Currently in Department", options=opt_depts, key="sales_f_dept")
-            f_designer = st.selectbox("Assigned Designer", options=opt_designers, key="sales_f_des")
+            with sf_c2:
+                f_contact = st.selectbox("Contact Person", options=opt_contacts, index=0, key="sf_drp_cnt")
+                f_phone = st.selectbox("Mobile / Contact Number", options=opt_phones, index=0, key="sf_drp_phn")
+
+            with sf_c3:
+                f_dept = st.selectbox("Currently in Department", options=opt_depts, index=0, key="sf_drp_dpt")
+                f_designer = st.selectbox("Assigned Designer", options=opt_designers, index=0, key="sf_drp_dsg")
+
+            # Reset Button
+            if st.button("🔄 Reset Filters", type="secondary", key="btn_rst_sf"):
+                for k in ["sf_drp_jno", "sf_drp_cli", "sf_drp_due", "sf_drp_cnt", "sf_drp_phn", "sf_drp_dpt", "sf_drp_dsg"]:
+                    if k in st.session_state:
+                        del st.session_state[k]
+                st.rerun()
 
         # Apply Filters
         filtered_my_jobs = []
-        for j in my_jobs:
+        for j in (my_jobs or []):
             if f_job_no != "All" and str(j.get("job_no")) != f_job_no:
                 continue
-            if f_client != "All" and str(j.get("client_name")).strip() != f_client:
+            if f_client != "All" and str(j.get("client_name", "")).strip() != f_client:
                 continue
-            if f_contact != "All" and str(j.get("contact_person")).strip() != f_contact:
+            if f_contact != "All" and str(j.get("contact_person", "")).strip() != f_contact:
                 continue
-            if f_phone != "All" and str(j.get("contact_phone")).strip() != f_phone:
+            if f_phone != "All" and str(j.get("contact_phone", "")).strip() != f_phone:
                 continue
-            if f_due_date != "All" and str(j.get("due_date")) != f_due_date:
+            if f_due_date != "All" and str(j.get("due_date", "")) != f_due_date:
                 continue
             if f_dept != "All Departments" and j.get("current_stage") != f_dept:
                 continue
-            if f_designer != "All" and str(j.get("assigned_designer")).strip() != f_designer:
+            if f_designer != "All" and str(j.get("assigned_designer", "")).strip() != f_designer:
                 continue
             filtered_my_jobs.append(j)
 
