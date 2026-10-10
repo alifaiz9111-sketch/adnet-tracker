@@ -50,10 +50,11 @@ def render(user):
             if not j.get("is_returned") and j.get("assigned_designer") == user["full_name"]
         ]
 
-    t_active, t_pool, t_returns = st.tabs([
+    t_active, t_pool, t_returns, t_hist = st.tabs([
         f"📌 Active Assigned Desk ({len(my_active)})",
         f"📢 Open Claim Pool ({len(open_pool)})",
-        f"🚨 QC Returns / Corrections ({len(qc_returns)})"
+        f"🚨 QC Returns / Corrections ({len(qc_returns)})",
+        "📜 Design Work History"
     ])
 
     def render_job_card(job, mode="active"):
@@ -180,3 +181,101 @@ def render(user):
         else:
             for j in qc_returns:
                 render_job_card(j, mode="return")
+
+    with t_hist:
+        st.markdown("#### 📜 Archive: Completed & Ongoing Design Work")
+
+        # Fetch all jobs that have ever had a designer assigned, sorted latest first by date & time
+        try:
+            h_res = (
+                supabase.table("jobs")
+                .select("*")
+                .not_.is_("assigned_designer", "null")
+                .order("created_at", desc=True)
+                .execute()
+            )
+            raw_history_jobs = h_res.data or []
+        except Exception as e:
+            st.error(f"Error loading design history: {e}")
+            raw_history_jobs = []
+
+        is_elevated = user.get("account_type") in ["SUPER_ADMIN", "CEO", "MANAGER"]
+
+        # Dropdown filtering for Admin, Manager, and CEO
+        if is_elevated:
+            all_designer_names = sorted(list({
+                str(j.get("assigned_designer")).strip()
+                for j in raw_history_jobs
+                if j.get("assigned_designer") and j.get("assigned_designer") != "OPEN_POOL"
+            }))
+            filter_options = ["All Designers"] + all_designer_names
+
+            selected_designer = st.selectbox(
+                "Filter by Designer",
+                options=filter_options,
+                index=0,
+                key="des_hist_filter_dropdown"
+            )
+
+            if selected_designer == "All Designers":
+                filtered_history = raw_history_jobs
+            else:
+                filtered_history = [
+                    j for j in raw_history_jobs
+                    if str(j.get("assigned_designer", "")).strip() == selected_designer
+                ]
+        else:
+            # Regular designer sees only their completed/active design work
+            filtered_history = [
+                j for j in raw_history_jobs
+                if str(j.get("assigned_designer", "")).strip().lower() == user["full_name"].lower()
+            ]
+
+        st.caption(f"Showing **{len(filtered_history)}** design record(s) sorted by latest date and time:")
+        st.markdown("---")
+
+        if not filtered_history:
+            st.info("No design work records found matching the criteria.")
+        else:
+            for job in filtered_history:
+                jid = job["job_id"]
+                items = get_job_items(jid)
+                stage = job.get("current_stage", "DESIGN")
+                is_ret = job.get("is_returned", False)
+
+                # Format created timestamp
+                created_dt = str(job.get("created_at", ""))[:19].replace("T", " ")
+
+                with st.container(border=True):
+                    hc1, hc2, hc3 = st.columns([3, 3, 2])
+
+                    with hc1:
+                        st.markdown(f"#### #{job.get('job_no')} — {job.get('client_name')}")
+                        st.caption(f"🕒 Created: `{created_dt}`")
+                        st.caption(f"📅 Target Due: `{job.get('due_date')}`")
+                        
+                        if is_ret:
+                            st.markdown("<span style='color:#F87171; font-weight:700;'>● Defect / Returned</span>", unsafe_allow_html=True)
+                        elif stage == "SETTLED":
+                            st.markdown("<span style='color:#34D399; font-weight:700;'>● Settled / Complete</span>", unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"<span style='color:#FBBF24; font-weight:700;'>● Stage: {stage}</span>", unsafe_allow_html=True)
+
+                    with hc2:
+                        st.markdown(f"🎨 **Assigned Designer:** `{job.get('assigned_designer') or 'Unassigned'}`")
+                        st.caption(f"👤 Contact: **{job.get('contact_person') or 'N/A'}** ({job.get('contact_phone') or 'N/A'})")
+                        st.caption(f"Sales Rep: `{job.get('order_taken_by') or 'N/A'}`")
+                        if items:
+                            item_str = ", ".join([f"{it.get('item_name')} (Qty: {it.get('quantity')} {it.get('unit')})" for it in items])
+                            st.caption(f"📦 Items: {item_str}")
+
+                    with hc3:
+                        proof_url = job.get("proof_file_url")
+                        if proof_url:
+                            st.link_button("👁️ View Proof File", proof_url, use_container_width=True)
+                        else:
+                            st.caption("No proof file attached")
+
+                        if is_elevated:
+                            tot_val = sum(float(it.get("amount", 0) or 0) for it in items)
+                            st.caption(f"Order Value: **₹ {tot_val:,.2f}**")
