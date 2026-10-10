@@ -82,28 +82,37 @@ def render(user):
                             st.caption(f"&nbsp;&nbsp;⚙️ **Specs:** {it.get('specifications')}")
 
                 with c_actions:
-                    # Return / Flag Job back to Design or Sales
+                    # Return / Flag Job back to Accounts, Design, or Sales
                     with st.popover("⚠️ Return / Flag Job", use_container_width=True):
                         st.markdown("#### Send Job Back")
                         return_target = st.selectbox(
                             "Return To Station",
-                            ["DESIGN", "SALES"],
-                            format_func=lambda x: "🎨 Design / Proofs" if x == "DESIGN" else "📝 Order Intake / Sales",
+                            ["PAYMENT", "DESIGN", "SALES"],
+                            format_func=lambda x: {
+                                "PAYMENT": "💳 Advance / Accounts Clearance",
+                                "DESIGN": "🎨 Design & Proofs",
+                                "SALES": "📝 Order Intake / Sales"
+                            }.get(x, x),
                             key=f"ret_tgt_{jid}"
                         )
-                        reason = st.text_area("Issue / Defect Explanation *", placeholder="e.g. Dimensions mismatch", key=f"ret_rsn_{jid}")
+                        reason = st.text_area(
+                            "Issue / Return Explanation *", 
+                            placeholder="e.g. Advance pending, payment confirmation unverified, dimension discrepancy...", 
+                            key=f"ret_rsn_{jid}"
+                        )
                         if st.button("Confirm Return", key=f"btn_ret_{jid}", type="primary", use_container_width=True):
                             if not reason.strip():
-                                st.error("Please provide a valid reason.")
+                                st.error("Please provide a valid reason for returning the job.")
                             else:
                                 try:
+                                    target_label = "Accounts Clearance" if return_target == "PAYMENT" else return_target
                                     supabase.table("jobs").update({
                                         "current_stage": return_target,
                                         "is_returned": True,
                                         "returned_by": f"{user['full_name']} (Production)",
                                         "return_reason": reason.strip()
                                     }).eq("job_id", int(jid)).execute()
-                                    st.warning(f"Job returned to {return_target}.")
+                                    st.warning(f"Job #{job.get('job_no')} returned to {target_label}.")
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"Failed to return job: {e}")
