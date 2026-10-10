@@ -77,7 +77,27 @@ def render(user):
                                 "current_stage": "BILLING_REVIEW",
                                 "is_returned": False
                             }).eq("job_id", int(job["job_id"])).execute()
-                            st.success(f"Job #{job.get('job_no')} passed to Billing Review.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Failed to route job: {e}")
+                            # Action: Return to Quality Check (QC)
+                with st.popover("⚠️ Return to QC", use_container_width=True):
+                    st.markdown("#### Send Job Back to QC")
+                    st.caption("Flag packaging issues, missing items, or inspection defects.")
+                    qc_reason = st.text_area(
+                        "Issue / Defect Reason *",
+                        placeholder="e.g. Quantity short, finish defect noticed before loading...",
+                        key=f"ret_qc_rsn_{job['job_id']}"
+                    )
+                    if st.button("Confirm Return to QC", key=f"btn_ret_qc_{job['job_id']}", type="primary", use_container_width=True):
+                        if not qc_reason.strip():
+                            st.error("Please provide a valid reason.")
+                        else:
+                            try:
+                                supabase.table("jobs").update({
+                                    "current_stage": "QC",
+                                    "is_returned": True,
+                                    "returned_by": f"{user['full_name']} (Dispatch)",
+                                    "return_reason": qc_reason.strip()
+                                }).eq("job_id", int(job["job_id"])).execute()
+                                st.warning(f"Job #{job.get('job_no')} returned to Quality Check (QC).")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Failed to return job to QC: {e}")
