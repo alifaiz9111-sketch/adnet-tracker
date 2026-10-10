@@ -562,7 +562,7 @@ def render(user):
                         if is_del_req:
                             st.caption("Request is awaiting review in Executive Overview.")
                         else:
-                            with st.popover("🗑️ Request Deletion", use_container_width=True):
+                        with st.popover("🗑️ Request Deletion", use_container_width=True):
                                 st.caption("Submit deletion request to CEO / Admin for approval.")
                                 del_reason = st.text_input(
                                     "Reason for Deletion *", 
