@@ -255,16 +255,27 @@ def render(user):
         st.markdown(f"### Grand Total Order Value: `₹ {grand_total:,.2f}`")
 
         if st.button("🚀 Submit & Dispatch Jobsheet", type="primary", use_container_width=True):
-            if not (job_no and client_name and contact_person and contact_phone):
-                st.error("Please fill in all required header fields (Job #, Client Name, Contact Person, and Phone).")
-            elif any(not it["item_name"].strip() for it in st.session_state.sales_items):
+            # Normalize and auto-fallback optional contact info
+            j_no = str(job_no).strip() if job_no else ""
+            c_name = str(client_name).strip() if client_name else ""
+            c_person = str(contact_person).strip() if contact_person else "Direct Client"
+            c_phone = str(contact_phone).strip() if contact_phone else "N/A"
+
+            if not j_no or not c_name:
+                missing = []
+                if not j_no:
+                    missing.append("Jobsheet Number")
+                if not c_name:
+                    missing.append("Client / Corporate Entity")
+                st.error(f"Please fill in mandatory field(s): {', '.join(missing)}")
+            elif any(not it.get("item_name", "").strip() for it in st.session_state.sales_items):
                 st.error("Please ensure every added line item has a valid name.")
             else:
                 header_payload = {
-                    "job_no": job_no,
-                    "client_name": client_name,
-                    "contact_person": contact_person,
-                    "contact_phone": contact_phone,
+                    "job_no": j_no,
+                    "client_name": c_name,
+                    "contact_person": c_person,
+                    "contact_phone": c_phone,
                     "due_date": str(due_date),
                     "order_taken_by": user["full_name"],
                     "current_stage": routed_desk,
