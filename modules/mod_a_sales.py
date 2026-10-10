@@ -98,6 +98,13 @@ def render(user):
             )
             is_gst = "GST Invoice" in billing_choice
 
+            # Billing Address placed directly below Billing Classification
+            billing_address = st.text_input(
+                "Billing Address" + (" *" if is_gst else " (Optional)"),
+                placeholder="e.g. 12/A Park Street, Kolkata - 700016",
+                key="s_baddr"
+            ).strip()
+
             c1, c2, c3 = st.columns(3)
             with c1:
                 job_no = st.text_input("Jobsheet Number *", value=suggested_no, key="s_job_no").strip()
@@ -118,14 +125,13 @@ def render(user):
                     key="s_route",
                 )
 
-            # Conditional GST Compliance Details
+            # Conditional GST Specific Fields (GSTIN and Place of Supply)
             gstin = ""
-            billing_address = ""
             place_of_supply = "19 - West Bengal"
 
             if is_gst:
                 st.markdown("##### 🏛️ GST Compliance Information")
-                gc1, gc2, gc3 = st.columns([1.5, 1.5, 3])
+                gc1, gc2 = st.columns([1, 1])
                 with gc1:
                     gstin = st.text_input("Client GSTIN *", placeholder="e.g. 19AAAAA0000A1Z5", key="s_gstin").strip().upper()
                 with gc2:
@@ -143,8 +149,6 @@ def render(user):
                         ],
                         key="s_pos"
                     )
-                with gc3:
-                    billing_address = st.text_input("Registered GST Billing Address *", placeholder="e.g. 12/A Park Street, Kolkata - 700016", key="s_baddr").strip()
 
             # Designer Assignment option if routed to DESIGN
             target_designer = "OPEN_POOL"
