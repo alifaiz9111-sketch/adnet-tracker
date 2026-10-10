@@ -96,16 +96,26 @@ def render(user):
             if job.get("is_returned"):
                 st.warning(f"⚠️ Flagged Return: {job.get('return_reason')}")
 
-            # 2. Client Financial Terms
+            # 2. Client Financial Terms (Horizontal Side-by-Side)
             billing_type = job.get("billing_type", "NON_GST")
-            t_col1, t_col2 = st.columns([2, 4])
-            with t_col1:
-                term_mode = st.radio(
-                    "Client Financial Terms:",
-                    ["Advance Client (Upfront Required)", "Credit / Corporate Client (Pre-Approved Ledger)"],
-                    key=f"terms_{job_id}",
-                    index=0
-                )
+            term_mode = st.radio(
+                "Client Financial Terms:",
+                options=["Advance Client (Upfront Required)", "Credit / Corporate Client (Pre-Approved Ledger)"],
+                index=0,
+                horizontal=True,
+                key=f"terms_{job_id}"
+            )
+
+            # # 2. Client Financial Terms
+            # billing_type = job.get("billing_type", "NON_GST")
+            # t_col1, t_col2 = st.columns([2, 4])
+            # with t_col1:
+            #     term_mode = st.radio(
+            #         "Client Financial Terms:",
+            #         ["Advance Client (Upfront Required)", "Credit / Corporate Client (Pre-Approved Ledger)"],
+            #         key=f"terms_{job_id}",
+            #         index=0
+            #     )
             # with t_col2:
             #     if "Advance Client" in term_mode:
             #         st.caption("ℹ️ **Standard Policy:** Minimum deposit / advance payment is required before production floor kicks off.")
