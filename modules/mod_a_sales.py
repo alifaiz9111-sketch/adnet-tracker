@@ -321,40 +321,48 @@ def render(user):
     with t_history:
         my_jobs = get_user_created_jobs(user["full_name"], is_management=is_management)
 
-        # --- MULTI-FIELD SEARCH & FILTER BAR ---
+        # --- DYNAMIC SEARCHABLE DROPDOWN FILTER BAR ---
         st.markdown("##### 🔍 Search & Filter Orders")
+
+        # Distinct sorted values for auto-complete dropdowns
+        opt_job_nos = ["All"] + sorted(list({str(j.get("job_no")) for j in my_jobs if j.get("job_no")}))
+        opt_clients = ["All"] + sorted(list({str(j.get("client_name")).strip() for j in my_jobs if j.get("client_name")}))
+        opt_contacts = ["All"] + sorted(list({str(j.get("contact_person")).strip() for j in my_jobs if j.get("contact_person")}))
+        opt_phones = ["All"] + sorted(list({str(j.get("contact_phone")).strip() for j in my_jobs if j.get("contact_phone")}))
+        opt_due_dates = ["All"] + sorted(list({str(j.get("due_date")) for j in my_jobs if j.get("due_date")}))
+        opt_depts = ["All Departments", "DESIGN", "PAYMENT", "PRODUCTION", "QC", "DISPATCH", "BILLING", "SETTLED"]
+        opt_designers = ["All"] + sorted(list({str(j.get("assigned_designer")).strip() for j in my_jobs if j.get("assigned_designer")}))
+
         sf_c1, sf_c2, sf_c3 = st.columns(3)
         with sf_c1:
-            f_job_no = st.text_input("Jobsheet Number", placeholder="e.g. 1001", key="sales_f_jno").strip().lower()
-            f_client = st.text_input("Client / Corporate Entity", placeholder="e.g. Apollo", key="sales_f_client").strip().lower()
-            f_due_date = st.date_input("Target Delivery Date", value=None, key="sales_f_due")
+            f_job_no = st.selectbox("Jobsheet Number", options=opt_job_nos, key="sales_f_jno")
+            f_client = st.selectbox("Client / Corporate Entity", options=opt_clients, key="sales_f_client")
+            f_due_date = st.selectbox("Target Delivery Date", options=opt_due_dates, key="sales_f_due")
 
         with sf_c2:
-            f_contact = st.text_input("Contact Person", placeholder="e.g. Amitava", key="sales_f_contact").strip().lower()
-            f_phone = st.text_input("Mobile / Contact Number", placeholder="e.g. 9830", key="sales_f_phone").strip().lower()
+            f_contact = st.selectbox("Contact Person", options=opt_contacts, key="sales_f_contact")
+            f_phone = st.selectbox("Mobile / Contact Number", options=opt_phones, key="sales_f_phone")
 
         with sf_c3:
-            dept_options = ["All Departments", "DESIGN", "PAYMENT", "PRODUCTION", "QC", "DISPATCH", "BILLING", "SETTLED"]
-            f_dept = st.selectbox("Currently in Department", dept_options, key="sales_f_dept")
-            
-            designer_search = st.text_input("Assigned Designer", placeholder="e.g. Rahul / Open Pool", key="sales_f_des").strip().lower()
+            f_dept = st.selectbox("Currently in Department", options=opt_depts, key="sales_f_dept")
+            f_designer = st.selectbox("Assigned Designer", options=opt_designers, key="sales_f_des")
 
         # Apply Filters
         filtered_my_jobs = []
         for j in my_jobs:
-            if f_job_no and f_job_no not in str(j.get("job_no", "")).lower():
+            if f_job_no != "All" and str(j.get("job_no")) != f_job_no:
                 continue
-            if f_client and f_client not in str(j.get("client_name", "")).lower():
+            if f_client != "All" and str(j.get("client_name")).strip() != f_client:
                 continue
-            if f_contact and f_contact not in str(j.get("contact_person", "")).lower():
+            if f_contact != "All" and str(j.get("contact_person")).strip() != f_contact:
                 continue
-            if f_phone and f_phone not in str(j.get("contact_phone", "")).lower():
+            if f_phone != "All" and str(j.get("contact_phone")).strip() != f_phone:
                 continue
-            if f_due_date and str(j.get("due_date", "")) != str(f_due_date):
+            if f_due_date != "All" and str(j.get("due_date")) != f_due_date:
                 continue
             if f_dept != "All Departments" and j.get("current_stage") != f_dept:
                 continue
-            if designer_search and designer_search not in str(j.get("assigned_designer", "")).lower():
+            if f_designer != "All" and str(j.get("assigned_designer")).strip() != f_designer:
                 continue
             filtered_my_jobs.append(j)
 
