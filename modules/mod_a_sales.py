@@ -321,10 +321,50 @@ def render(user):
     with t_history:
         my_jobs = get_user_created_jobs(user["full_name"], is_management=is_management)
 
-        if not my_jobs:
-            st.info("No orders found recorded.")
+        # --- MULTI-FIELD SEARCH & FILTER BAR ---
+        st.markdown("##### 🔍 Search & Filter Orders")
+        sf_c1, sf_c2, sf_c3 = st.columns(3)
+        with sf_c1:
+            f_job_no = st.text_input("Jobsheet Number", placeholder="e.g. 1001", key="sales_f_jno").strip().lower()
+            f_client = st.text_input("Client / Corporate Entity", placeholder="e.g. Apollo", key="sales_f_client").strip().lower()
+            f_due_date = st.date_input("Target Delivery Date", value=None, key="sales_f_due")
+
+        with sf_c2:
+            f_contact = st.text_input("Contact Person", placeholder="e.g. Amitava", key="sales_f_contact").strip().lower()
+            f_phone = st.text_input("Mobile / Contact Number", placeholder="e.g. 9830", key="sales_f_phone").strip().lower()
+
+        with sf_c3:
+            dept_options = ["All Departments", "DESIGN", "PAYMENT", "PRODUCTION", "QC", "DISPATCH", "BILLING", "SETTLED"]
+            f_dept = st.selectbox("Currently in Department", dept_options, key="sales_f_dept")
+            
+            designer_search = st.text_input("Assigned Designer", placeholder="e.g. Rahul / Open Pool", key="sales_f_des").strip().lower()
+
+        # Apply Filters
+        filtered_my_jobs = []
+        for j in my_jobs:
+            if f_job_no and f_job_no not in str(j.get("job_no", "")).lower():
+                continue
+            if f_client and f_client not in str(j.get("client_name", "")).lower():
+                continue
+            if f_contact and f_contact not in str(j.get("contact_person", "")).lower():
+                continue
+            if f_phone and f_phone not in str(j.get("contact_phone", "")).lower():
+                continue
+            if f_due_date and str(j.get("due_date", "")) != str(f_due_date):
+                continue
+            if f_dept != "All Departments" and j.get("current_stage") != f_dept:
+                continue
+            if designer_search and designer_search not in str(j.get("assigned_designer", "")).lower():
+                continue
+            filtered_my_jobs.append(j)
+
+        st.caption(f"Showing **{len(filtered_my_jobs)}** matching order(s):")
+        st.markdown("---")
+
+        if not filtered_my_jobs:
+            st.info("No matching orders found.")
         else:
-            for j in my_jobs:
+            for j in filtered_my_jobs:
                 items = get_job_items(j["job_id"])
                 total_val = sum(float(it.get("amount", 0) or 0) for it in items)
 
