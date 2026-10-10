@@ -106,11 +106,11 @@ def render(user):
                     key=f"terms_{job_id}",
                     index=0
                 )
-            with t_col2:
-                if "Advance Client" in term_mode:
-                    st.caption("ℹ️ **Standard Policy:** Minimum deposit / advance payment is required before production floor kicks off.")
-                else:
-                    st.caption("ℹ️ **Corporate Policy:** Pre-approved client running on credit terms. Job can proceed with zero upfront deposit.")
+            # with t_col2:
+            #     if "Advance Client" in term_mode:
+            #         st.caption("ℹ️ **Standard Policy:** Minimum deposit / advance payment is required before production floor kicks off.")
+            #     else:
+            #         st.caption("ℹ️ **Corporate Policy:** Pre-approved client running on credit terms. Job can proceed with zero upfront deposit.")
 
             st.markdown("##### 📝 Ordered Line Items Summary")
             for idx, it in enumerate(items, 1):
