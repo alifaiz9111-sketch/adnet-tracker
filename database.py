@@ -495,3 +495,28 @@ def add_custom_preset(preset_type: str, preset_name: str) -> bool:
         return True
     except Exception:
         return False
+
+import uuid
+
+def upload_dispatch_file(uploaded_file, folder_name: str) -> str:
+    """Uploads an in-memory file to Supabase Storage and returns its public URL."""
+    if not uploaded_file:
+        return None
+    try:
+        file_ext = uploaded_file.name.split(".")[-1]
+        file_name = f"{folder_name}/{uuid.uuid4().hex}.{file_ext}"
+        file_bytes = uploaded_file.getvalue()
+
+        # Upload to Supabase Storage bucket 'dispatch-media'
+        res = supabase.storage.from_("dispatch-media").upload(
+            file_name,
+            file_bytes,
+            {"content-type": uploaded_file.type}
+        )
+
+        # Retrieve public URL
+        public_url = supabase.storage.from_("dispatch-media").get_public_url(file_name)
+        return public_url
+    except Exception as e:
+        print(f"Error uploading file: {e}")
+        return None

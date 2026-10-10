@@ -1,5 +1,5 @@
 import streamlit as st
-from database import supabase, get_job_items
+from database import supabase, get_job_items, upload_dispatch_file
 
 
 def render(user):
@@ -111,53 +111,76 @@ def render(user):
                         type="primary",
                         use_container_width=True,
                     ):
-                        try:
+                        with st.spinner("Uploading proof attachments and recording dispatch..."):
                             challan_url = None
                             job_done_url = None
 
-                            # Helper to upload file to supabase storage if bucket exists
-                            def _upload_proof_file(uploaded_file, file_prefix):
-                                f_bytes = uploaded_file.getvalue()
-                                f_ext = uploaded_file.name.split(".")[-1]
-                                f_path = f"{file_prefix}_{job['job_id']}_{job.get('job_no')}.{f_ext}"
+                            def _upload_file(file_obj, prefix):
+                                if not file_obj:
+                                    return None
                                 try:
-                                    supabase.storage.from_("delivery_proofs").upload(
-                                        path=f_path,
-                                        file=f_bytes,
-                                        file_options={"content-type": uploaded_file.type, "upsert": "true"}
-                                    )
-                                    return supabase.storage.from_("delivery_proofs").get_public_url(f_path)
-                                except Exception:
-                                    return f"[Uploaded: {uploaded_file.name}]"
+                                    f_ext = file_obj.name.split(".")[-1]
+                                    path = f"{prefix}_{job['job_id']}_{job.get('job_no')}.{f_ext}"
+                                    # Target dispatch-media bucket; fallback to delivery_proofs
+                                    target_bucket = "dispatch-media"
+                                    try:
+                                        supabase.storage.from_(target_bucket).upload(
+                                            path=path,
+                                            file=file_obj.getvalue(),
+                                            file_options={"content-type": file_obj.type, "upsert": "true"}
+                                        )
+                                        return supabase.storage.from_(target_bucket).get_public_url(path)
+                                    except Exception:
+                                        supabase.storage.from_("delivery_proofs").upload(
+                                            path=path,
+                                            file=file_obj.getvalue(),
+                                            file_options={"content-type": file_obj.type, "upsert": "true"}
+                                        )
+                                        return supabase.storage.from_("delivery_proofs").get_public_url(path)
+                                except Exception as err:
+                                    st.warning(f"File upload note: {err}")
+                                    return None
 
                             if file_challan:
-                                challan_url = _upload_proof_file(file_challan, "challan")
-
+                                challan_url = _upload_file(file_challan, "challan")
                             if file_job_done:
-                                job_done_url = _upload_proof_file(file_job_done, "job_done")
+                                job_done_url = _upload_file(file_job_done, "jobdone")
 
-                            # Auto-mark line items delivered
-                            supabase.table("job_items").update({
-                                "is_delivered": True
-                            }).eq("job_id", job["job_id"]).execute()
+                            try:
+                                # 1. Mark line items delivered
+                                supabase.table("job_items").update({
+                                    "is_delivered": True
+                                }).eq("job_id", job["job_id"]).execute()
 
-                            # Update jobs record
-                            update_payload = {
-                                "current_stage": "BILLING_REVIEW",
-                                "is_returned": False,
-                                "challan_no": auto_challan_no,
-                                "driver_name": runner_name.strip() if runner_name else None,
-                            }
-                            if challan_url:
-                                update_payload["challan_doc_url"] = challan_url
-                            if job_done_url:
-                                update_payload["proof_file_url"] = job_done_url
+                                # 2. Prepare payload matching active database columns
+                                d_name = runner_name.strip() if runner_name else None
+                                update_payload = {
+                                    "current_stage": "BILLING_REVIEW",
+                                    "is_returned": False,
+                                    "challan_no": auto_challan_no,
+                                    "dispatch_notes": f"Driver: {d_name}" if d_name else None,
+                                    "challan_image_url": challan_url,
+                                    "job_done_image_url": job_done_url,
+                                    "proof_file_url": job_done_url
+                                }
 
-                            supabase.table("jobs").update(update_payload).eq("job_id", int(job["job_id"])).execute()
-                            st.success(f"Job #{job.get('job_no')} marked delivered and passed to Billing Review.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Failed to route job: {e}")
+                                res = supabase.table("jobs").update(update_payload).eq("job_id", int(job["job_id"])).execute()
+                                
+                                st.success(f"Job #{job.get('job_no')} passed to Billing Review.")
+                                st.rerun()
+                            except Exception as e:
+                                # Fallback if specific image/note columns do not exist yet in jobs table
+                                try:
+                                    basic_payload = {
+                                        "current_stage": "BILLING_REVIEW",
+                                        "is_returned": False,
+                                        "challan_no": auto_challan_no
+                                    }
+                                    supabase.table("jobs").update(basic_payload).eq("job_id", int(job["job_id"])).execute()
+                                    st.warning(f"Job #{job.get('job_no')} moved to Billing Review, but check DB columns: {e}")
+                                    st.rerun()
+                                except Exception as inner_e:
+                                    st.error(f"Database update failed: {inner_e}")
 
                 # Return to QC Action
                 with st.popover("⚠️ Return to QC", use_container_width=True):
