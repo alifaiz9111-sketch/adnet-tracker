@@ -1,5 +1,4 @@
 import os
-import base64
 import streamlit as st
 import time
 from database import (
@@ -37,16 +36,8 @@ if "user" not in st.session_state:
     st.session_state.user = None
 
 
-def get_image_base64(image_path: str) -> str:
-    """Helper to load a local image and return base64 string for CSS embedding."""
-    if os.path.exists(image_path):
-        with open(image_path, "rb") as img_file:
-            return base64.b64encode(img_file.read()).decode()
-    return ""
-
-
 def inject_custom_css():
-    """Injects CSS for badges and sidebar elements."""
+    """Injects CSS for blinking badges and queue counter boxes."""
     st.markdown("""
         <style>
         /* Blinking Animation */
@@ -78,6 +69,7 @@ def inject_custom_css():
             vertical-align: middle;
             display: inline-block;
         }
+        /* Style radio labels to allow HTML tags */
         div[data-testid="stRadio"] label p {
             display: inline !important;
         }
@@ -85,196 +77,45 @@ def inject_custom_css():
     """, unsafe_allow_html=True)
 
 
-def render_login_screen():
-    """Renders the custom split-card AdNet login screen."""
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    candidate_logos = [
-        os.path.join(base_dir, "assets", "logo.png"),
-        os.path.join(base_dir, "assets", "Logo.png"),
-        os.path.join(base_dir, "assets", "logo.PNG"),
-        os.path.join(base_dir, "logo.png"),
-    ]
-    resolved_logo = next((p for p in candidate_logos if os.path.exists(p)), None)
-    banner_path = os.path.join(base_dir, "assets", "login_banner.png")
-
-    logo_b64 = get_image_base64(resolved_logo) if resolved_logo else ""
-    banner_b64 = get_image_base64(banner_path)
-
-    st.markdown(f"""
-        <style>
-        /* Global Page Background */
-        .stApp {{
-            background: linear-gradient(135deg, #f5f6f8 0%, #ebeef2 100%) !important;
-        }}
-
-        header[data-testid="stHeader"] {{
-            background: transparent !important;
-        }}
-
-        /* Login Outer Container */
-        .login-wrapper {{
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px 0;
-        }}
-
-        .login-card {{
-            display: flex;
-            width: 960px;
-            min-height: 540px;
-            background: #ffffff;
-            border-radius: 26px;
-            border: 2px solid #e11d48;
-            box-shadow: 0 16px 40px rgba(225, 29, 72, 0.2), 0 2px 10px rgba(0, 0, 0, 0.05);
-            overflow: hidden;
-        }}
-
-        /* Left Side (Form Area) */
-        .login-left {{
-            flex: 1.4;
-            padding: 40px 48px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-        }}
-
-        .card-topbar {{
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 24px;
-        }}
-
-        .card-topbar-links {{
-            display: flex;
-            gap: 20px;
-            align-items: center;
-            font-size: 13px;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-        }}
-
-        .card-topbar-links span.active-tab {{
-            color: #e11d48;
-            border-bottom: 2px solid #e11d48;
-            padding-bottom: 2px;
-        }}
-
-        .login-title {{
-            color: #e11d48;
-            font-size: 32px;
-            font-weight: 700;
-            text-align: center;
-            margin-bottom: 20px;
-        }}
-
-        /* Streamlit Input Styling */
-        div[data-testid="stForm"] {{
-            border: none !important;
-            padding: 0 !important;
-        }}
-
-        div[data-testid="stTextInput"] input {{
-            border-radius: 22px !important;
-            background-color: #f1f3f5 !important;
-            border: 1px solid #d1d5db !important;
-            color: #1f2937 !important;
-            padding: 10px 18px !important;
-            font-size: 14px !important;
-        }}
-
-        div[data-testid="stTextInput"] input:focus {{
-            border: 1.5px solid #e11d48 !important;
-            box-shadow: 0 0 0 1px #e11d48 !important;
-            background-color: #ffffff !important;
-        }}
-
-        /* Red Pill Submit Button */
-        div[data-testid="stFormSubmitButton"] > button {{
-            background-color: #e11d48 !important;
-            color: #ffffff !important;
-            border: none !important;
-            border-radius: 22px !important;
-            font-weight: 700 !important;
-            font-size: 15px !important;
-            padding: 10px 0 !important;
-            box-shadow: 0 4px 14px rgba(225, 29, 72, 0.35) !important;
-            width: 100% !important;
-            margin-top: 10px !important;
-        }}
-
-        div[data-testid="stFormSubmitButton"] > button:hover {{
-            background-color: #be123c !important;
-            box-shadow: 0 6px 18px rgba(225, 29, 72, 0.45) !important;
-        }}
-
-        /* Right Side (Red Graphic Banner) */
-        .login-right {{
-            flex: 1;
-            background: linear-gradient(135deg, #a70000 0%, #670000 100%);
-            {"background-image: url('data:image/png;base64," + banner_b64 + "'); background-size: cover; background-position: center;" if banner_b64 else ""}
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }}
-        </style>
-    """, unsafe_allow_html=True)
-
-    _, center_col, _ = st.columns([0.2, 3.6, 0.2])
-
-    with center_col:
-        st.markdown(f"""
-            <div class="login-wrapper">
-                <div class="login-card">
-                    <div class="login-left">
-                        <div class="card-topbar">
-                            {"<img src='data:image/png;base64," + logo_b64 + "' style='height:36px; object-fit:contain;' />" if logo_b64 else "<h4 style='color:#e11d48; margin:0;'>Ad Net</h4>"}
-                            <div class="card-topbar-links">
-                                <span style="color:#6b7280;">CONTACT</span>
-                                <span class="active-tab">LOG IN</span>
-                            </div>
-                        </div>
-                        <div class="login-title">Log in</div>
-        """, unsafe_allow_html=True)
-
-        with st.form("login_form", clear_on_submit=False):
-            username = st.text_input("Username", placeholder="👤 Username", label_visibility="collapsed").strip()
-            password = st.text_input("Password", placeholder="🔒 Password", type="password", label_visibility="collapsed").strip()
-
-            c_sub1, c_sub2 = st.columns([1, 1])
-            with c_sub1:
-                st.checkbox("Remember Me", value=False)
-            with c_sub2:
-                st.markdown("<p style='text-align: right; font-size: 13px; color: #6b7280; font-style: italic; margin-top: 4px;'>Forgot Password?</p>", unsafe_allow_html=True)
-
-            submit = st.form_submit_button("Log in", type="primary", use_container_width=True)
-
-            if submit:
-                user = authenticate_user(username, password)
-                if user:
-                    st.session_state.authenticated = True
-                    st.session_state.user = user
-                    log_audit(user["user_id"], "LOGIN", f"User {username} logged into system.")
-                    st.rerun()
-                else:
-                    st.error("Invalid credentials or deactivated account.")
-
-        st.markdown("""
-                    </div>
-                    <div class="login-right">
-                    </div>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-
-
 def main():
     inject_custom_css()
 
     # Login Screen
     if not st.session_state.authenticated:
-        render_login_screen()
+        _, logo_col, _ = st.columns([1, 1.2, 1])
+        with logo_col:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            candidate_paths = [
+                os.path.join(base_dir, "assets", "logo.png"),
+                os.path.join(base_dir, "assets", "Logo.png"),
+                os.path.join(base_dir, "assets", "logo.PNG"),
+                os.path.join(base_dir, "logo.png"),
+            ]
+            resolved_logo = next((p for p in candidate_paths if os.path.exists(p)), None)
+
+            if resolved_logo:
+                st.image(resolved_logo, use_container_width=True)
+            else:
+                st.markdown("<h2 style='text-align: center;'>🖨️ AdNet Operations & Floor Management</h2>", unsafe_allow_html=True)
+
+        st.caption("<p style='text-align: center;'>Login with ID - Password</p>", unsafe_allow_html=True)
+
+        _, col, _ = st.columns([1, 1.5, 1])
+        with col:
+            with st.form("login_form"):
+                username = st.text_input("Username").strip()
+                password = st.text_input("Password / PIN", type="password").strip()
+                submit = st.form_submit_button("Sign In", type="primary", use_container_width=True)
+
+                if submit:
+                    user = authenticate_user(username, password)
+                    if user:
+                        st.session_state.authenticated = True
+                        st.session_state.user = user
+                        log_audit(user["user_id"], "LOGIN", f"User {username} logged into system.")
+                        st.rerun()
+                    else:
+                        st.error("Invalid credentials or deactivated account.")
         return
 
     # Logged In State
