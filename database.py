@@ -192,16 +192,24 @@ def delete_vendor(vendor_id):
 # --- JOB SHEET & ITEM HELPERS ---
 
 def get_next_job_no():
+    """Universally fetches the latest job number and generates the next sequential number."""
     try:
-        res = supabase.table("jobs").select("job_no").order("job_id", desc=True).limit(1).execute()
+        # Fetch the most recent jobs by descending job_id
+        res = supabase.table("jobs").select("job_no, job_id").order("job_id", desc=True).limit(10).execute()
         data = res.data or []
-        if data and data[0].get("job_no"):
-            last_no = data[0]["job_no"]
-            digits = "".join(filter(str.isdigit, str(last_no)))
+        
+        max_num = 1000
+        for row in data:
+            val = str(row.get("job_no", ""))
+            digits = "".join(filter(str.isdigit, val))
             if digits:
-                return str(int(digits) + 1)
-        return "1001"
-    except Exception:
+                num = int(digits)
+                if num > max_num:
+                    max_num = num
+        
+        return str(max_num + 1)
+    except Exception as e:
+        print(f"Error fetching next job number: {e}")
         return "1001"
 
 

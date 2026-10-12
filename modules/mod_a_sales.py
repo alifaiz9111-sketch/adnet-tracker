@@ -88,7 +88,6 @@ def render(user):
         with st.container(border=True):
             st.markdown("#### 1. Client & Commercial Header")
             
-            # Side-by-side selection for Billing Type
             billing_choice = st.radio(
                 "Billing Classification *",
                 options=["Non-GST Bill", "GST Invoice (B2B Tax Invoice)"],
@@ -98,7 +97,6 @@ def render(user):
             )
             is_gst = "GST Invoice" in billing_choice
 
-            # Billing Address placed directly below Billing Classification
             billing_address = st.text_input(
                 "Billing Address" + (" *" if is_gst else " (Optional)"),
                 placeholder="e.g. 12/A Park Street, Kolkata - 700016",
@@ -107,13 +105,35 @@ def render(user):
 
             c1, c2, c3 = st.columns(3)
             with c1:
-                job_no = st.text_input("Jobsheet Number *", value=suggested_no, key="s_job_no").strip()
-                client_name = st.text_input("Client / Corporate Entity *", placeholder="e.g. Apollo Hospitals", key="s_client").strip()
+                # Locked input to preserve universal sequence
+                st.text_input(
+                    "Jobsheet Number (Auto-Generated) *",
+                    value=f"#{suggested_no}",
+                    disabled=True,
+                    key="s_job_no_disp"
+                )
+                client_name = st.text_input(
+                    "Client / Corporate Entity *",
+                    placeholder="e.g. Apollo Hospitals",
+                    key="s_client"
+                ).strip()
             with c2:
-                contact_person = st.text_input("Contact Person", placeholder="e.g. Amitava Ghosh", key="s_contact").strip()
-                contact_phone = st.text_input("Mobile / Contact Number", placeholder="e.g. 9830112233", key="s_phone").strip()
+                contact_person = st.text_input(
+                    "Contact Person",
+                    placeholder="e.g. Amitava Ghosh",
+                    key="s_contact"
+                ).strip()
+                contact_phone = st.text_input(
+                    "Mobile / Contact Number",
+                    placeholder="e.g. 9830112233",
+                    key="s_phone"
+                ).strip()
             with c3:
-                due_date = st.date_input("Target Delivery Date *", min_value=date.today(), key="s_due")
+                due_date = st.date_input(
+                    "Target Delivery Date *",
+                    min_value=date.today(),
+                    key="s_due"
+                )
                 routed_desk = st.selectbox(
                     "Routing Workflow Target *",
                     options=["DESIGN", "PAYMENT", "PRODUCTION"],
@@ -125,7 +145,6 @@ def render(user):
                     key="s_route",
                 )
 
-            # Conditional GST Specific Fields (GSTIN and Place of Supply)
             gstin = ""
             place_of_supply = "19 - West Bengal"
 
@@ -133,7 +152,11 @@ def render(user):
                 st.markdown("##### 🏛️ GST Compliance Information")
                 gc1, gc2 = st.columns([1, 1])
                 with gc1:
-                    gstin = st.text_input("Client GSTIN *", placeholder="e.g. 19AAAAA0000A1Z5", key="s_gstin").strip().upper()
+                    gstin = st.text_input(
+                        "Client GSTIN *",
+                        placeholder="e.g. 19AAAAA0000A1Z5",
+                        key="s_gstin"
+                    ).strip().upper()
                 with gc2:
                     place_of_supply = st.selectbox(
                         "Place of Supply (State) *",
@@ -150,11 +173,12 @@ def render(user):
                         key="s_pos"
                     )
 
-            # Designer Assignment option if routed to DESIGN
             target_designer = "OPEN_POOL"
             if routed_desk == "DESIGN":
                 designers_list = get_all_designers()
-                des_options = ["📢 Broadcast to All Designers (Open Claim)"] + [f"{d['full_name']} (@{d['username']})" for d in designers_list]
+                des_options = ["📢 Broadcast to All Designers (Open Claim)"] + [
+                    f"{d['full_name']} (@{d['username']})" for d in designers_list
+                ]
                 chosen = st.selectbox("Assign Designer *", options=des_options, key="s_des_choice")
                 if "📢" not in chosen:
                     target_designer = chosen.split(" (@")[0].strip()
@@ -195,7 +219,6 @@ def render(user):
                         if st.button("🗑️", key=f"del_row_{idx}"):
                             rows_to_remove.append(idx)
 
-                # Dimensions
                 st.caption("📐 **Sizes / Dimensions** (Default: 1 × 1 × 1):")
                 s_c1, s_c2, s_c3, s_c4 = st.columns(4)
                 with s_c1:
@@ -297,19 +320,14 @@ def render(user):
         st.markdown(f"### Grand Total Order Value: `₹ {grand_total:,.2f}`")
 
         if st.button("🚀 Submit & Dispatch Jobsheet", type="primary", use_container_width=True):
-            # Normalize and auto-fallback optional contact info
-            j_no = str(job_no).strip() if job_no else ""
+            # Atomic universal next job sheet sequence
+            universal_job_no = get_next_job_no()
             c_name = str(client_name).strip() if client_name else ""
             c_person = str(contact_person).strip() if contact_person else "Direct Client"
             c_phone = str(contact_phone).strip() if contact_phone else "N/A"
 
-            if not j_no or not c_name:
-                missing = []
-                if not j_no:
-                    missing.append("Jobsheet Number")
-                if not c_name:
-                    missing.append("Client / Corporate Entity")
-                st.error(f"Please fill in mandatory field(s): {', '.join(missing)}")
+            if not c_name:
+                st.error("Please fill in mandatory field: Client / Corporate Entity")
             elif is_gst and (not gstin or len(gstin) < 15):
                 st.error("Please provide a valid 15-character GSTIN for GST Tax Invoices.")
             elif is_gst and not billing_address:
@@ -318,7 +336,7 @@ def render(user):
                 st.error("Please ensure every added line item has a valid name.")
             else:
                 header_payload = {
-                    "job_no": j_no,
+                    "job_no": universal_job_no,
                     "client_name": c_name,
                     "contact_person": c_person,
                     "contact_phone": c_phone,
@@ -360,7 +378,7 @@ def render(user):
                         pass
 
                     des_msg = f" (Assigned to: `{target_designer}`)" if routed_desk == "DESIGN" else ""
-                    st.success(f"Job Sheet #{job_no} created successfully and routed to `{routed_desk}`{des_msg}!")
+                    st.success(f"Job Sheet #{universal_job_no} created successfully and routed to `{routed_desk}`{des_msg}!")
                     st.session_state.sales_items = [{
                         "item_name": "",
                         "length": 1.0,
@@ -381,11 +399,9 @@ def render(user):
     with t_history:
         my_jobs = get_user_created_jobs(user["full_name"], is_management=is_management)
 
-        # --- DYNAMIC SEARCHABLE DROPDOWN FILTER BAR ---
         with st.container(border=True):
             st.markdown("#### 🔍 Filter & Search Orders")
             
-            # CSS safeguard to ensure selectbox dropdowns and labels render visibly
             st.markdown("""
                 <style>
                 div[data-baseweb="select"] {
@@ -400,7 +416,6 @@ def render(user):
 
             jobs_source = my_jobs or []
 
-            # Populate distinct options
             opt_job_nos = ["All"] + sorted(list({str(j.get("job_no")) for j in jobs_source if j.get("job_no")}))
             opt_clients = ["All"] + sorted(list({str(j.get("client_name")).strip() for j in jobs_source if j.get("client_name")}))
             opt_contacts = ["All"] + sorted(list({str(j.get("contact_person")).strip() for j in jobs_source if j.get("contact_person")}))
@@ -423,14 +438,12 @@ def render(user):
                 f_dept = st.selectbox("Currently in Department", options=opt_depts, index=0, key="sf_drp_dpt")
                 f_designer = st.selectbox("Assigned Designer", options=opt_designers, index=0, key="sf_drp_dsg")
 
-            # Reset Button
             if st.button("🔄 Reset Filters", type="secondary", key="btn_rst_sf"):
                 for k in ["sf_drp_jno", "sf_drp_cli", "sf_drp_due", "sf_drp_cnt", "sf_drp_phn", "sf_drp_dpt", "sf_drp_dsg"]:
                     if k in st.session_state:
                         del st.session_state[k]
                 st.rerun()
 
-        # Apply Filters
         filtered_my_jobs = []
         for j in (my_jobs or []):
             if f_job_no != "All" and str(j.get("job_no")) != f_job_no:
@@ -501,14 +514,12 @@ def render(user):
                                 cur_st_idx = stage_list.index(j.get("current_stage")) if j.get("current_stage") in stage_list else 0
                                 ed_stage = st.selectbox("Stage Desk", stage_list, index=cur_st_idx, key=f"ed_stg_{j['job_id']}")
 
-                                # Option to reassign designer
                                 designers_all = get_all_designers()
                                 d_names = ["OPEN_POOL"] + [d["full_name"] for d in designers_all]
                                 cur_des = j.get("assigned_designer") or "OPEN_POOL"
                                 d_idx = d_names.index(cur_des) if cur_des in d_names else 0
                                 ed_designer = st.selectbox("Assigned Designer", options=d_names, index=d_idx, key=f"ed_des_{j['job_id']}")
 
-                                # Edit GST details
                                 is_currently_gst = j.get("billing_type") == "GST"
                                 ed_is_gst = st.checkbox("GST Tax Invoice Billing", value=is_currently_gst, key=f"ed_isgst_{j['job_id']}")
                                 ed_gstin = j.get("gstin", "") or ""
