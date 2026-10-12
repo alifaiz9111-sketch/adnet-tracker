@@ -135,20 +135,32 @@ def main():
 
         st.markdown("---")
 
-        # --- BUTTON: MAIL TODAY'S JOBSHEET (ABOVE WORKSPACES) ---
-        with st.popover("📧 Mail Today's Jobsheet", use_container_width=True):
-            st.markdown("##### 📨 Send Digest")
+        # --- BUTTON: MAIL JOBSHEET DIGEST (WITH DATE PICKER) ---
+        with st.popover("📧 Mail Jobsheet Digest", use_container_width=True):
+            st.markdown("##### 📨 Send Jobsheet Digest")
+
+            from datetime import date
+            chosen_date = st.date_input(
+                "Select Date *",
+                value=date.today(),
+                key="mail_digest_date"
+            )
+
             target_recipient = st.text_input(
                 "Recipient Address",
                 value="khalikhussain80@gmail.com",
-                placeholder="Enter email address"
+                placeholder="Enter email address",
+                key="mail_digest_recipient"
             ).strip()
 
-            if st.button("Send Email", type="primary", use_container_width=True):
-                with st.spinner("Connecting to SMTP server and dispatching..."):
+            if st.button("Send Email", type="primary", use_container_width=True, key="btn_send_digest_email"):
+                with st.spinner(f"Compiling jobsheets for {chosen_date} and dispatching..."):
                     try:
                         from email_service import send_daily_jobsheet_digest
-                        ok, res_msg = send_daily_jobsheet_digest(recipient_email=target_recipient)
+                        ok, res_msg = send_daily_jobsheet_digest(
+                            recipient_email=target_recipient,
+                            target_date=chosen_date
+                        )
                         if ok:
                             st.success(res_msg)
                         else:

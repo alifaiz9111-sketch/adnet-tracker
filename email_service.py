@@ -57,31 +57,25 @@ def send_email(subject: str, html_body: str, recipient: str = None) -> tuple[boo
         return False, f"SMTP Connection Error: {str(e)}"
 
 
-def send_daily_jobsheet_digest(recipient_email: str = None) -> tuple[bool, str]:
-    """Compiles all jobsheets logged/updated today into an HTML table and emails them."""
+def send_daily_jobsheet_digest(recipient_email: str = None, target_date = None) -> tuple[bool, str]:
+    """Compiles all jobsheets logged on the selected date into an HTML table and emails them."""
     try:
-        today_str = str(date.today())
+        query_date = str(target_date or date.today())
+        start_ts = f"{query_date}T00:00:00"
+        end_ts = f"{query_date}T23:59:59"
+
         res = (
             supabase.table("jobs")
             .select("*")
-            .gte("created_at", f"{today_str}T00:00:00")
+            .gte("created_at", start_ts)
+            .lte("created_at", end_ts)
             .order("job_id", desc=True)
             .execute()
         )
         jobs = res.data or []
 
         if not jobs:
-            fallback_res = (
-                supabase.table("jobs")
-                .select("*")
-                .order("job_id", desc=True)
-                .limit(25)
-                .execute()
-            )
-            jobs = fallback_res.data or []
-
-        if not jobs:
-            return False, "No jobs found in database to compile."
+            return False, f"No jobsheets found in database created on {query_date}."
 
         rows_html = ""
         total_day_value = 0.0
@@ -106,7 +100,7 @@ def send_daily_jobsheet_digest(recipient_email: str = None) -> tuple[bool, str]:
         html_content = f"""
         <div style="font-family: Arial, sans-serif; color: #1E293B;">
             <h2 style="color: #E11D48; margin-bottom: 4px;">AdNet Operations Digest</h2>
-            <p style="margin-top: 0; color: #64748B;">Date: <b>{today_str}</b> | Total Floor Orders: <b>{len(jobs)}</b></p>
+            <p style="margin-top: 0; color: #64748B;">Date: <b>{query_date}</b> | Total Floor Orders: <b>{len(jobs)}</b></p>
             <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 14px;">
                 <thead>
                     <tr style="background-color: #F8FAFC; color: #475569; text-align: left;">
@@ -127,7 +121,7 @@ def send_daily_jobsheet_digest(recipient_email: str = None) -> tuple[bool, str]:
         """
 
         target = recipient_email or CEO_RECIPIENT
-        return send_email(f"AdNet Daily Jobsheet Digest [{today_str}]", html_content, target)
+        return send_email(f"AdNet Jobsheet Digest [{query_date}]", html_content, target)
 
     except Exception as e:
         return False, f"Digest compile error: {str(e)}"
