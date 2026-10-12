@@ -57,6 +57,87 @@ def send_email(subject: str, html_body: str, recipient: str = None) -> tuple[boo
         return False, f"SMTP Connection Error: {str(e)}"
 
 
+def send_new_jobsheet_alert(header: dict, items: list) -> tuple[bool, str]:
+    """Sends an instant email alert to CEO whenever a jobsheet is created."""
+    job_no = header.get("job_no", "N/A")
+    client = header.get("client_name", "N/A")
+    due_date = header.get("due_date", "N/A")
+    taken_by = header.get("order_taken_by", "Sales")
+    route = header.get("current_stage", "DESIGN")
+    b_type = header.get("billing_type", "NON_GST")
+
+    total_val = sum(float(it.get("amount", 0) or 0) for it in items)
+
+    item_rows = ""
+    for idx, it in enumerate(items, 1):
+        item_rows += f"""
+        <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;">{idx}. {it.get('item_name')}</td>
+            <td style="padding: 8px; border: 1px solid #ddd; font-size: 12px; color: #555;">{it.get('specifications') or 'N/A'}</td>
+            <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{it.get('quantity')} {it.get('unit')}</td>
+            <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">₹ {float(it.get('rate', 0)):,.2f}</td>
+            <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">₹ {float(it.get('amount', 0)):,.2f}</td>
+        </tr>
+        """
+
+    html = f"""
+    <div style="font-family: Arial, sans-serif; color: #1e293b; max-width: 650px; margin: auto; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+        <div style="background-color: #e11d48; color: #ffffff; padding: 16px 20px;">
+            <h2 style="margin: 0; font-size: 20px;">🚨 New Job Sheet Created: #{job_no}</h2>
+            <p style="margin: 4px 0 0 0; font-size: 13px; opacity: 0.9;">AdNet Operations Management Alert</p>
+        </div>
+        <div style="padding: 20px;">
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px;">
+                <tr>
+                    <td style="padding: 6px 0; color: #64748b;"><b>Client / Entity:</b></td>
+                    <td style="padding: 6px 0; font-weight: bold; color: #0f172a;">{client}</td>
+                    <td style="padding: 6px 0; color: #64748b;"><b>Target Due Date:</b></td>
+                    <td style="padding: 6px 0; font-weight: bold; color: #e11d48;">{due_date}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: #64748b;"><b>Contact Person:</b></td>
+                    <td style="padding: 6px 0;">{header.get('contact_person', 'N/A')} ({header.get('contact_phone', 'N/A')})</td>
+                    <td style="padding: 6px 0; color: #64748b;"><b>Booked By:</b></td>
+                    <td style="padding: 6px 0;">{taken_by}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: #64748b;"><b>Initial Desk:</b></td>
+                    <td style="padding: 6px 0;"><span style="background: #e0f2fe; color: #0284c7; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">{route}</span></td>
+                    <td style="padding: 6px 0; color: #64748b;"><b>Billing Type:</b></td>
+                    <td style="padding: 6px 0;"><span style="background: #f1f5f9; padding: 2px 8px; border-radius: 4px; font-size: 12px;">{b_type}</span></td>
+                </tr>
+            </table>
+
+            <h4 style="margin: 16px 0 8px 0; color: #334155;">Ordered Deliverables & Specs</h4>
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                <thead>
+                    <tr style="background-color: #f8fafc; color: #475569; text-align: left;">
+                        <th style="padding: 8px; border: 1px solid #cbd5e1;">Item</th>
+                        <th style="padding: 8px; border: 1px solid #cbd5e1;">Specs</th>
+                        <th style="padding: 8px; border: 1px solid #cbd5e1; text-align: center;">Qty</th>
+                        <th style="padding: 8px; border: 1px solid #cbd5e1; text-align: right;">Rate</th>
+                        <th style="padding: 8px; border: 1px solid #cbd5e1; text-align: right;">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {item_rows}
+                </tbody>
+            </table>
+
+            <div style="text-align: right; margin-top: 16px;">
+                <h3 style="margin: 0; color: #0f172a;">Total Job Value: <span style="color: #e11d48;">₹ {total_val:,.2f}</span></h3>
+            </div>
+        </div>
+        <div style="background-color: #f8fafc; padding: 12px 20px; font-size: 12px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0;">
+            This is an automated system notification from AdNet Floor Tracker.
+        </div>
+    </div>
+    """
+
+    subject = f"🔔 [New Order #{job_no}] {client} — ₹{total_val:,.2f}"
+    return send_email(subject, html, CEO_RECIPIENT)
+
+
 def send_daily_jobsheet_digest(recipient_email: str = None, target_date = None) -> tuple[bool, str]:
     """Compiles all jobsheets logged on the selected date into an HTML table and emails them."""
     try:

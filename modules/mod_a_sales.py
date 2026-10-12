@@ -371,11 +371,16 @@ def render(user):
 
                 ok, msg = create_job_sheet(header_payload, prepared_items)
                 if ok:
+                    # Automatically send alert email to CEO
                     try:
                         from email_service import send_new_jobsheet_alert
-                        send_new_jobsheet_alert(header_payload, prepared_items)
-                    except Exception:
-                        pass
+                        mail_ok, mail_info = send_new_jobsheet_alert(header_payload, prepared_items)
+                        if mail_ok:
+                            st.toast("📧 Notification email dispatched to CEO!", icon="✅")
+                        else:
+                            st.toast(f"⚠️ Email dispatch notice: {mail_info}", icon="⚠️")
+                    except Exception as err:
+                        st.toast(f"⚠️ Email could not be sent: {err}", icon="⚠️")
 
                     des_msg = f" (Assigned to: `{target_designer}`)" if routed_desk == "DESIGN" else ""
                     st.success(f"Job Sheet #{universal_job_no} created successfully and routed to `{routed_desk}`{des_msg}!")
