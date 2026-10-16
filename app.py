@@ -22,9 +22,19 @@ from modules import (
     ceo_admin
 )
 
+# Resolve logo path for favicon / browser tab icon
+_base_dir = os.path.dirname(os.path.abspath(__file__))
+_candidate_icons = [
+    os.path.join(_base_dir, "assets", "logo.png"),
+    os.path.join(_base_dir, "assets", "Logo.png"),
+    os.path.join(_base_dir, "assets", "logo.PNG"),
+    os.path.join(_base_dir, "logo.png"),
+]
+_favicon = next((p for p in _candidate_icons if os.path.exists(p)), "🖨️")
+
 st.set_page_config(
     page_title="AdNet Commercial Print & Sign Operations",
-    page_icon="🖨️",
+    page_icon=_favicon,
     layout="wide",
     initial_sidebar_state="expanded"
 )
