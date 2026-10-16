@@ -24,15 +24,6 @@ from modules import (
 
 # Resolve logo path for favicon / browser tab icon
 _base_dir = os.path.dirname(os.path.abspath(__file__))
-_candidate_icons = [
-    os.path.join(_base_dir, "assets", "logo.png"),
-    os.path.join(_base_dir, "assets", "Logo.png"),
-    os.path.join(_base_dir, "assets", "logo.PNG"),
-    os.path.join(_base_dir, "logo.png"),
-]
-_favicon = next((p for p in _candidate_icons if os.path.exists(p)), "🖨️")
-
-_base_dir = os.path.dirname(os.path.abspath(__file__))
 _logo_path = os.path.join(_base_dir, "assets", "Ad_logo.png")
 _favicon = _logo_path if os.path.exists(_logo_path) else "🖨️"
 
