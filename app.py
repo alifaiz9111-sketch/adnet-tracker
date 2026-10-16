@@ -32,6 +32,10 @@ _candidate_icons = [
 ]
 _favicon = next((p for p in _candidate_icons if os.path.exists(p)), "🖨️")
 
+_base_dir = os.path.dirname(os.path.abspath(__file__))
+_logo_path = os.path.join(_base_dir, "assets", "Ad_logo.png")
+_favicon = _logo_path if os.path.exists(_logo_path) else "🖨️"
+
 st.set_page_config(
     page_title="AdNet Commercial Print & Sign Operations",
     page_icon=_favicon,
@@ -96,9 +100,9 @@ def main():
         with logo_col:
             base_dir = os.path.dirname(os.path.abspath(__file__))
             candidate_paths = [
+                os.path.join(base_dir, "assets", "Ad_logo.png"),
                 os.path.join(base_dir, "assets", "logo.png"),
                 os.path.join(base_dir, "assets", "Logo.png"),
-                os.path.join(base_dir, "assets", "logo.PNG"),
                 os.path.join(base_dir, "logo.png"),
             ]
             resolved_logo = next((p for p in candidate_paths if os.path.exists(p)), None)
