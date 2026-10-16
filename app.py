@@ -1,6 +1,7 @@
 import os
 import streamlit as st
 import time
+from PIL import Image
 from database import (
     authenticate_user, 
     supabase, 
@@ -22,10 +23,17 @@ from modules import (
     ceo_admin
 )
 
-# Resolve logo path for favicon / browser tab icon
+# Load logo directly as a PIL Image object for reliable favicon rendering
 _base_dir = os.path.dirname(os.path.abspath(__file__))
 _logo_path = os.path.join(_base_dir, "assets", "Ad_logo.png")
-_favicon = _logo_path if os.path.exists(_logo_path) else "🖨️"
+
+if os.path.exists(_logo_path):
+    try:
+        _favicon = Image.open(_logo_path)
+    except Exception:
+        _favicon = "🖨️"
+else:
+    _favicon = "🖨️"
 
 st.set_page_config(
     page_title="AdNet Commercial Print & Sign Operations",
