@@ -98,16 +98,10 @@ def main():
         _, logo_col, _ = st.columns([1, 1.2, 1])
         with logo_col:
             base_dir = os.path.dirname(os.path.abspath(__file__))
-            candidate_paths = [
-                os.path.join(base_dir, "assets", "Ad_logo.png"),
-                os.path.join(base_dir, "assets", "logo.png"),
-                os.path.join(base_dir, "assets", "Logo.png"),
-                os.path.join(base_dir, "logo.png"),
-            ]
-            resolved_logo = next((p for p in candidate_paths if os.path.exists(p)), None)
+            login_logo_path = os.path.join(base_dir, "assets", "Logo.png")
 
-            if resolved_logo:
-                st.image(resolved_logo, use_container_width=True)
+            if os.path.exists(login_logo_path):
+                st.image(login_logo_path, use_container_width=True)
             else:
                 st.markdown("<h2 style='text-align: center;'>🖨️ AdNet Operations & Floor Management</h2>", unsafe_allow_html=True)
 
