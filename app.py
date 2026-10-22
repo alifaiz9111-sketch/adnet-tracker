@@ -188,45 +188,45 @@ def main():
         # Executive Desks
         if account_type in ["SUPER_ADMIN", "CEO"]:
             del_count = p_counts.get("DELETION_REQS", 0)
-            lbl_exec = make_station_label("👑 Executive Floor KPI Overview", del_count)
+            lbl_exec = make_station_label("Executive Dashboard", del_count)
             menu_config.append(("EXEC_OVERVIEW", lbl_exec, ceo_admin.render_overview))
-            menu_config.append(("EXEC_RBAC", "👥 Staff & RBAC Admin", ceo_admin.render_user_management))
+            menu_config.append(("EXEC_RBAC", "Access Control & Users", ceo_admin.render_user_management))
 
         # Manager Track & Audit
         if account_type in ["MANAGER", "SUPER_ADMIN", "CEO"]:
-            menu_config.append(("MGR_TRACK", "🔍 Manager Track & Audit", manager_view.render))
+            menu_config.append(("MGR_TRACK", "Manager", manager_view.render))
 
         # Workstation Modules with Pending Counters
         if "MOD_A" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
-            menu_config.append(("MOD_A", "📝 1. Order Intake (Sales)", mod_a_sales.render))
+            menu_config.append(("MOD_A", "Job Intake", mod_a_sales.render))
 
         if "MOD_B" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
             c_b = p_counts.get("DESIGN", 0)
-            menu_config.append(("MOD_B", make_station_label("🎨 2. Design & Proofs", c_b), mod_b_design.render))
+            menu_config.append(("MOD_B", make_station_label("Design Approval", c_b), mod_b_design.render))
 
         if "MOD_C" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
             c_c = p_counts.get("PAYMENT", 0)
-            menu_config.append(("MOD_C", make_station_label("💳 3. Advance / Accounts Clearance", c_c), mod_c_payment.render))
+            menu_config.append(("MOD_C", make_station_label("Payment Clearance", c_c), mod_c_payment.render))
 
         if "MOD_D" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
             c_d = p_counts.get("PRODUCTION", 0)
-            menu_config.append(("MOD_D", make_station_label("⚙️ 4. Production Floor", c_d), mod_d_production.render))
+            menu_config.append(("MOD_D", make_station_label("In Production", c_d), mod_d_production.render))
 
         if "MOD_E" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
             c_e = p_counts.get("QC", 0)
-            menu_config.append(("MOD_E", make_station_label("🔍 5. Quality Check (QC)", c_e), mod_e_qc.render))
+            menu_config.append(("MOD_E", make_station_label("Quality Check (QC)", c_e), mod_e_qc.render))
 
         if "MOD_F" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
             c_f = p_counts.get("DISPATCH", 0)
-            menu_config.append(("MOD_F", make_station_label("🚚 6. Dispatch & Field Delivery", c_f), mod_f_dispatch.render))
+            menu_config.append(("MOD_F", make_station_label("Dispatch & Field Delivery", c_f), mod_f_dispatch.render))
 
         if "MOD_G" in user_perms or account_type in ["SUPER_ADMIN", "CEO"]:
             c_g = p_counts.get("BILLING", 0)
-            menu_config.append(("MOD_G", make_station_label("🧾 7. Billing & Invoicing Desk", c_g), mod_g_billing.render))
+            menu_config.append(("MOD_G", make_station_label("Final Billing", c_g), mod_g_billing.render))
 
         # --- MODULE 8: CA & GST AUDIT DESK ---
         if "MOD_CA" in user_perms or account_type in ["SUPER_ADMIN", "CEO", "MANAGER", "STAFF"]:
-            menu_config.append(("CA_AUDIT", "🏛️ 8. CA & GST Audit Desk", mod_ca_audit.render))
+            menu_config.append(("CA_AUDIT", "Tax & Compliance", mod_ca_audit.render))
 
         if not menu_config:
             st.warning("No active module permissions assigned. Please contact the administrator.")
