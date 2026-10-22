@@ -6,20 +6,25 @@ from supabase import create_client, Client
 
 IST = pytz.timezone("Asia/Kolkata")
 
-# Fetch credentials from Streamlit Secrets or Environment Variables
+# Fetch credentials with fallbacks (Supports Streamlit Cloud Secrets, OS env, and direct fallback)
 SUPABASE_URL = ""
 SUPABASE_KEY = ""
 
-if "supabase" in st.secrets:
-    SUPABASE_URL = st.secrets["supabase"].get("url", "")
-    SUPABASE_KEY = st.secrets["supabase"].get("key", "")
-else:
-    SUPABASE_URL = st.secrets.get("SUPABASE_URL", os.getenv("SUPABASE_URL", ""))
-    SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", os.getenv("SUPABASE_KEY", ""))
+try:
+    if "supabase" in st.secrets:
+        SUPABASE_URL = st.secrets["supabase"].get("url", "")
+        SUPABASE_KEY = st.secrets["supabase"].get("key", "")
+    elif "SUPABASE_URL" in st.secrets and "SUPABASE_KEY" in st.secrets:
+        SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
+        SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
+except Exception:
+    pass
 
-if not SUPABASE_URL or not SUPABASE_KEY:
-    st.error("⚠️ Supabase credentials missing! Please configure [supabase] url and key in Streamlit Secrets.")
-    st.stop()
+# Environment variable fallbacks
+if not SUPABASE_URL:
+    SUPABASE_URL = os.getenv("SUPABASE_URL", "https://ddyeogqnfrlzqerwlqjr.supabase.co")
+if not SUPABASE_KEY:
+    SUPABASE_KEY = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRkeWVvZ3FuZnJsenFlcndscWpyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDk1ODMzOCwiZXhwIjoyMTA2NTM0MzM4fQ.wO2KaJd82bkYbrcDjui_3OdzpBg-gGn9XTFVt38h6rg")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -55,12 +60,16 @@ def authenticate_user(username, password):
         users = res.data or []
         if users:
             user = users[0]
-            supabase.table("users").update({
-                "last_login": datetime.now(IST).isoformat()
-            }).eq("user_id", user["user_id"]).execute()
+            try:
+                supabase.table("users").update({
+                    "last_login": datetime.now(IST).isoformat()
+                }).eq("user_id", user["user_id"]).execute()
+            except Exception:
+                pass
             return user
         return None
-    except Exception:
+    except Exception as e:
+        st.error(f"Supabase Auth Query Error: {e}")
         return None
 
 def update_user_password(user_id, old_password, new_password):
