@@ -622,7 +622,7 @@ def render(user):
                 with r_act:
                     action_choice = st.selectbox(
                         "Action",
-                        options=["Select Action", "Edit", "Delete"],
+                        options=["_", "Edit", "Delete"],
                         index=0,
                         key=f"act_drp_{jid}",
                         label_visibility="collapsed"
