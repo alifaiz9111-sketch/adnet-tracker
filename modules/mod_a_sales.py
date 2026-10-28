@@ -8,6 +8,7 @@ from database import (
     update_job_sheet_by_management,
     request_job_deletion,
     get_all_designers,
+    approve_and_forward_job,
 )
 
 
@@ -400,9 +401,258 @@ def render(user):
                 else:
                     st.error(f"Failed to create jobsheet: {msg}")
 
-    # --- TAB 2: ORDER HISTORY & MANAGEMENT EDIT ---
+    # --- TAB 2: ORDER HISTORY & MODIFICATIONS (15-ROW PAGINATED TABLE) ---
     with t_history:
-        my_jobs = get_user_created_jobs(user["full_name"], is_management=is_management)
+        my_jobs = get_user_created_jobs(user["full_name"], is_management=is_management) or []
+
+        # Floor name and stage mapping
+        floor_names = {
+            "DESIGN": "Design Desk",
+            "PAYMENT": "Accounts Desk",
+            "PRODUCTION": "Production Floor",
+            "QC": "Quality Check",
+            "DISPATCH": "Dispatch Desk",
+            "BILLING_REVIEW": "Billing Review",
+            "BILLING": "Billing Desk",
+            "SETTLED": "Settled & Closed"
+        }
+
+        stage_progress = {
+            "DESIGN": 15,
+            "PAYMENT": 30,
+            "PRODUCTION": 50,
+            "QC": 75,
+            "DISPATCH": 90,
+            "BILLING_REVIEW": 100,
+            "BILLING": 100,
+            "SETTLED": 100
+        }
+
+        pill_classes = {
+            "DESIGN": "pill-design",
+            "PAYMENT": "pill-payment",
+            "PRODUCTION": "pill-production",
+            "QC": "pill-qc",
+            "DISPATCH": "pill-dispatch",
+            "BILLING_REVIEW": "pill-billing",
+            "BILLING": "pill-billing",
+            "SETTLED": "pill-settled"
+        }
+
+        # --- Top Filter & Search Controls Bar ---
+        with st.container(border=True):
+            f1, f2, f3, f4 = st.columns([2.5, 2.5, 2.5, 1.5])
+            with f1:
+                search_kw = st.text_input(
+                    "Search Orders",
+                    placeholder="Search Job No, Client, Contact...",
+                    key="sales_search_kw"
+                ).strip().lower()
+            with f2:
+                status_choices = ["All Statuses"] + list(floor_names.values())
+                sel_floor = st.selectbox("Floor Status", options=status_choices, key="sales_floor_filter")
+            with f3:
+                sort_order = st.selectbox(
+                    "Sort By",
+                    options=["Recent Jobs (Newest First)", "Oldest Jobs", "Delivery Due Soonest"],
+                    key="sales_sort_filter"
+                )
+            with f4:
+                st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                if st.button("Reset Filters", type="secondary", use_container_width=True, key="sales_reset_btn"):
+                    st.session_state.sales_search_kw = ""
+                    st.session_state.sales_floor_filter = "All Statuses"
+                    st.session_state.sales_sort_filter = "Recent Jobs (Newest First)"
+                    st.rerun()
+
+        # Apply Filters
+        filtered_jobs = []
+        for j in my_jobs:
+            stg = j.get("current_stage", "DESIGN")
+            stg_clean = floor_names.get(stg, stg)
+
+            if sel_floor != "All Statuses" and stg_clean != sel_floor:
+                continue
+
+            if search_kw:
+                comb_text = f"{j.get('job_no', '')} {j.get('client_name', '')} {j.get('contact_person', '')} {j.get('contact_phone', '')}".lower()
+                if search_kw not in comb_text:
+                    continue
+
+            filtered_jobs.append(j)
+
+        # Apply Sorting
+        if sort_order == "Recent Jobs (Newest First)":
+            filtered_jobs.sort(key=lambda x: x.get("job_id", 0), reverse=True)
+        elif sort_order == "Oldest Jobs":
+            filtered_jobs.sort(key=lambda x: x.get("job_id", 0))
+        elif sort_order == "Delivery Due Soonest":
+            filtered_jobs.sort(key=lambda x: str(x.get("due_date", "9999-99-99")))
+
+        # --- Pagination Setup (Fixed 15 Rows Per Page) ---
+        ROWS_PER_PAGE = 15
+        total_records = len(filtered_jobs)
+        total_pages = max(1, (total_records + ROWS_PER_PAGE - 1) // ROWS_PER_PAGE)
+
+        if "sales_page_num" not in st.session_state:
+            st.session_state.sales_page_num = 1
+
+        if st.session_state.sales_page_num > total_pages:
+            st.session_state.sales_page_num = total_pages
+
+        curr_page = st.session_state.sales_page_num
+        start_idx = (curr_page - 1) * ROWS_PER_PAGE
+        end_idx = min(start_idx + ROWS_PER_PAGE, total_records)
+        page_records = filtered_jobs[start_idx:end_idx]
+
+        st.caption(f"Showing **{start_idx + 1 if total_records else 0} to {end_idx}** of **{total_records}** records")
+
+        if not page_records:
+            st.info("No matching job orders found.")
+        else:
+            # --- Table Top Heading Bar (Exact Requested Columns) ---
+            st.markdown("""
+                <div class="adnet-table-header">
+                    <div style="display: grid; grid-template-columns: 0.4fr 1.2fr 1.1fr 1.8fr 1.8fr 1.3fr 1fr 1.6fr 2fr; align-items: center; gap: 8px;">
+                        <div>[ ]</div>
+                        <div>Job No.</div>
+                        <div>Date</div>
+                        <div>Client</div>
+                        <div>Contact</div>
+                        <div>Delivery Date</div>
+                        <div style="text-align: center;">Progress</div>
+                        <div style="text-align: center;">Status</div>
+                        <div style="text-align: right; padding-right: 6px;">Action</div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+
+            # --- Table Data Rows ---
+            for j in page_records:
+                jid = j["job_id"]
+                job_no = j.get("job_no", str(jid))
+                created_date = str(j.get("created_at", ""))[:10] or "N/A"
+                client_name = j.get("client_name") or "N/A"
+                contact_p = j.get("contact_person") or "N/A"
+                contact_ph = j.get("contact_phone") or "N/A"
+                due_date_str = str(j.get("due_date") or "N/A")
+                stg = j.get("current_stage", "DESIGN")
+                stg_display = floor_names.get(stg, stg)
+                pill_style = pill_classes.get(stg, "pill-design")
+                pct = stage_progress.get(stg, 15)
+
+                # Track confirmation state per session
+                confirm_key = f"confirmed_sent_{jid}"
+                has_forwarded = st.session_state.get(confirm_key, False)
+                forwarded_floor_name = st.session_state.get(f"forwarded_floor_{jid}", stg_display)
+
+                r_col_check, r_col_no, r_col_date, r_col_client, r_col_contact, r_col_due, r_col_prog, r_col_stat, r_col_act = st.columns(
+                    [0.4, 1.2, 1.1, 1.8, 1.8, 1.3, 1, 1.6, 2]
+                )
+
+                with r_col_check:
+                    st.checkbox(" ", key=f"tbl_chk_{jid}", label_visibility="collapsed")
+
+                with r_col_no:
+                    st.markdown(f"<div style='font-weight: 700; color: #0f172a; padding-top: 6px;'>JOB-{job_no}</div>", unsafe_allow_html=True)
+
+                with r_col_date:
+                    st.markdown(f"<div style='color: #475569; font-size: 13px; padding-top: 6px;'>{created_date}</div>", unsafe_allow_html=True)
+
+                with r_col_client:
+                    st.markdown(f"<div style='font-weight: 600; color: #1e293b; padding-top: 6px;'>{client_name}</div>", unsafe_allow_html=True)
+
+                with r_col_contact:
+                    st.markdown(
+                        f"<div style='font-size: 13px; color: #334155; padding-top: 4px;'>"
+                        f"<div>{contact_p}</div>"
+                        f"<div style='color: #64748b; font-size: 11px;'>{contact_ph}</div>"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
+
+                with r_col_due:
+                    st.markdown(f"<div style='font-size: 13px; color: #475569; padding-top: 6px;'>{due_date_str}</div>", unsafe_allow_html=True)
+
+                with r_col_prog:
+                    # Clean circular percentage badge
+                    st.markdown(
+                        f"<div class='progress-circle' style='background: conic-gradient(#0284c7 {pct}%, #e2e8f0 0); border: 2px solid #ffffff;'>"
+                        f"<div style='background: #ffffff; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #0369a1;'>"
+                        f"{pct}%</div></div>",
+                        unsafe_allow_html=True
+                    )
+
+                with r_col_stat:
+                    st.markdown(
+                        f"<div style='text-align: center; padding-top: 6px;'>"
+                        f"<span class='adnet-pill {pill_style}'>{stg_display}</span>"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
+
+                with r_col_act:
+                    if has_forwarded:
+                        st.markdown(
+                            f"<div style='font-size: 12px; font-weight: 600; color: #0f766e; text-align: right; padding-top: 8px;'>"
+                            f"Approved and sent to {forwarded_floor_name}"
+                            f"</div>",
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        act_sub1, act_sub2 = st.columns([1.2, 0.8])
+                        with act_sub1:
+                            if st.button("Approve", key=f"btn_tbl_appr_{jid}", type="primary", use_container_width=True):
+                                ok, msg, next_stg = approve_and_forward_job(
+                                    job_id=jid,
+                                    user_full_name=user["full_name"]
+                                )
+                                if ok:
+                                    nxt_clean = floor_names.get(next_stg, next_stg)
+                                    st.session_state[confirm_key] = True
+                                    st.session_state[f"forwarded_floor_{jid}"] = nxt_clean
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
+                        with act_sub2:
+                            with st.popover("Edit", use_container_width=True):
+                                st.markdown(f"**Quick Edit Job #{job_no}**")
+                                ed_cli = st.text_input("Client", value=client_name, key=f"q_cli_{jid}")
+                                ed_cnt = st.text_input("Contact", value=contact_p, key=f"q_cnt_{jid}")
+                                ed_phn = st.text_input("Phone", value=contact_ph, key=f"q_ph_{jid}")
+
+                                if st.button("Save", key=f"q_save_{jid}", type="primary", use_container_width=True):
+                                    supabase.table("jobs").update({
+                                        "client_name": ed_cli.strip(),
+                                        "contact_person": ed_cnt.strip(),
+                                        "contact_phone": ed_phn.strip()
+                                    }).eq("job_id", jid).execute()
+                                    st.success("Updated.")
+                                    st.rerun()
+
+                st.markdown("<hr style='margin: 4px 0 8px 0; border: none; border-top: 1px solid #edf2f7;' />", unsafe_allow_html=True)
+
+        # --- Pagination Control Bar ---
+        if total_pages > 1:
+            st.markdown("<br>", unsafe_allow_html=True)
+            p_cols = st.columns([2, 1, 1, 1, 1, 1, 2])
+            with p_cols[1]:
+                if st.button("<", disabled=(curr_page == 1), key="p_prev_btn", use_container_width=True):
+                    st.session_state.sales_page_num = max(1, curr_page - 1)
+                    st.rerun()
+
+            for p_idx in range(1, min(total_pages + 1, 5)):
+                with p_cols[1 + p_idx]:
+                    is_active = (p_idx == curr_page)
+                    btn_type = "primary" if is_active else "secondary"
+                    if st.button(str(p_idx), type=btn_type, key=f"p_btn_{p_idx}", use_container_width=True):
+                        st.session_state.sales_page_num = p_idx
+                        st.rerun()
+
+            with p_cols[6]:
+                if st.button(">", disabled=(curr_page == total_pages), key="p_next_btn", use_container_width=True):
+                    st.session_state.sales_page_num = min(total_pages, curr_page + 1)
+                    st.rerun()
 
         with st.container(border=True):
             st.markdown("#### 🔍 Filter & Search Orders")

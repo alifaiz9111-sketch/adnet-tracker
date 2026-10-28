@@ -491,27 +491,6 @@ def add_custom_preset(preset_type: str, preset_name: str) -> bool:
     except Exception:
         return False
 
-def get_custom_presets(preset_type: str) -> list:
-    """Fetch all saved custom presets for dynamic dropdowns."""
-    try:
-        res = supabase.table("custom_presets").select("preset_name").eq("preset_type", preset_type).execute()
-        return [r["preset_name"] for r in (res.data or []) if r.get("preset_name")]
-    except Exception:
-        return []
-
-def add_custom_preset(preset_type: str, preset_name: str) -> bool:
-    """Inserts a new custom job/fabrication entry so it persists across all future jobs."""
-    p_clean = str(preset_name).strip()
-    if not p_clean or p_clean.upper() == "NEW":
-        return False
-    try:
-        supabase.table("custom_presets").upsert({
-            "preset_type": preset_type,
-            "preset_name": p_clean
-        }, on_conflict="preset_name").execute()
-        return True
-    except Exception:
-        return False
 
 import uuid
 
@@ -537,3 +516,48 @@ def upload_dispatch_file(uploaded_file, folder_name: str) -> str:
     except Exception as e:
         print(f"Error uploading file: {e}")
         return None
+
+def approve_and_forward_job(job_id: int, user_full_name: str, target_stage: str = None) -> tuple[bool, str, str]:
+    """
+    Approves and routes a job forward based on workflow stage hierarchy:
+    DESIGN -> PAYMENT -> PRODUCTION -> QC -> DISPATCH -> BILLING_REVIEW -> SETTLED
+    """
+    try:
+        res = supabase.table("jobs").select("job_no, current_stage").eq("job_id", int(job_id)).execute()
+        if not res.data:
+            return False, "Job not found", ""
+
+        job_data = res.data[0]
+        cur_stg = job_data.get("current_stage", "DESIGN")
+        job_num = job_data.get("job_no", "")
+
+        workflow_stages = [
+            "DESIGN",
+            "PAYMENT",
+            "PRODUCTION",
+            "QC",
+            "DISPATCH",
+            "BILLING_REVIEW",
+            "SETTLED"
+        ]
+
+        if target_stage and target_stage in workflow_stages:
+            next_stage = target_stage
+        else:
+            if cur_stg in workflow_stages:
+                cur_idx = workflow_stages.index(cur_stg)
+                next_stage = workflow_stages[cur_idx + 1] if cur_idx < len(workflow_stages) - 1 else cur_stg
+            else:
+                next_stage = "DESIGN"
+
+        supabase.table("jobs").update({
+            "current_stage": next_stage,
+            "is_returned": False,
+            "return_reason": None,
+            "accounts_cleared_by": user_full_name if next_stage == "PRODUCTION" else None
+        }).eq("job_id", int(job_id)).execute()
+
+        log_audit(0, "STAGE_FORWARDED", f"Job #{job_num} approved by {user_full_name} and routed to {next_stage}")
+        return True, f"Approved and sent to {next_stage}", next_stage
+    except Exception as e:
+        return False, str(e), ""

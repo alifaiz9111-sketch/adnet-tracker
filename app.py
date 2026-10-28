@@ -49,8 +49,8 @@ if "user" not in st.session_state:
     st.session_state.user = None
 
 
-def inject_custom_css():
-    """Injects CSS for blinking badges and queue counter boxes."""
+ def inject_custom_css():
+    """Injects CSS for blinking badges, queue counter boxes, and AdNet Table UI."""
     st.markdown("""
         <style>
         /* Blinking Animation */
@@ -82,9 +82,78 @@ def inject_custom_css():
             vertical-align: middle;
             display: inline-block;
         }
-        /* Style radio labels to allow HTML tags */
         div[data-testid="stRadio"] label p {
             display: inline !important;
+        }
+
+        /* --- ADNET CLEAN DATA TABLE THEME (NO EMOJIS / NO ICONS) --- */
+        .adnet-table-header {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px 8px 0 0;
+            padding: 12px 14px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #475569;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+        }
+        .adnet-table-row {
+            background-color: #ffffff;
+            border-left: 1px solid #e2e8f0;
+            border-right: 1px solid #e2e8f0;
+            border-bottom: 1px solid #edf2f7;
+            padding: 10px 14px;
+            align-items: center;
+            transition: background-color 0.15s ease-in-out;
+        }
+        .adnet-table-row:hover {
+            background-color: #f1f8fc;
+        }
+        .adnet-row-selected {
+            background-color: #e0f2fe !important;
+            border-left: 3px solid #0284c7 !important;
+        }
+
+        /* Status Pills */
+        .adnet-pill {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 10px;
+            border-radius: 14px;
+            text-align: center;
+            white-space: nowrap;
+        }
+        .pill-design { background-color: #e0f2fe; color: #0284c7; }
+        .pill-payment { background-color: #fef3c7; color: #d97706; }
+        .pill-production { background-color: #ffedd5; color: #ea580c; }
+        .pill-qc { background-color: #f3e8ff; color: #7e22ce; }
+        .pill-dispatch { background-color: #dcfce7; color: #16a34a; }
+        .pill-billing { background-color: #e2e8f0; color: #475569; }
+        .pill-settled { background-color: #ccfbf1; color: #0f766e; }
+
+        /* Progress Rings */
+        .progress-circle {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 700;
+            margin: auto;
+        }
+
+        /* Pagination Footer */
+        .adnet-pagination-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 4px;
+            font-size: 13px;
+            color: #64748b;
         }
         </style>
     """, unsafe_allow_html=True)
