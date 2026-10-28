@@ -221,17 +221,6 @@ def render(user):
     # --- Typography CSS ---
     st.markdown("""
         <style>
-        .tbl-cell-text {
-            font-size: 13px !important;
-            font-family: inherit !important;
-            color: #1e293b !important;
-            font-weight: 500 !important;
-            line-height: 1.4 !important;
-            padding-top: 8px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
         .tbl-cell-header {
             font-size: 13px !important;
             font-family: inherit !important;
@@ -239,6 +228,33 @@ def render(user):
             color: #475569 !important;
             letter-spacing: 0.3px;
             text-transform: uppercase;
+        }
+        /* Completely borderless, box-less row cell buttons */
+        div.row-clickable-cell button {
+            border: none !important;
+            background: transparent !important;
+            color: #1e293b !important;
+            font-size: 13px !important;
+            font-weight: 500 !important;
+            font-family: inherit !important;
+            text-align: left !important;
+            justify-content: flex-start !important;
+            padding: 8px 0 !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+            width: 100% !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+        }
+        div.row-clickable-cell button:hover {
+            color: #E11D48 !important;
+            background: transparent !important;
+        }
+        div.row-clickable-cell button:focus, div.row-clickable-cell button:active {
+            border: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
         }
         /* Clean text link style for clickable Job No */
         div[data-testid="column"]:nth-of-type(2) button {
@@ -290,20 +306,35 @@ def render(user):
             st.checkbox(" ", key=f"des_chk_{jid}", label_visibility="collapsed")
 
         with r_no:
-            if st.button(f"JOB-{job_no}", key=f"btn_open_modal_{jid}", type="secondary", use_container_width=True):
+            st.markdown('<div class="row-clickable-cell">', unsafe_allow_html=True)
+            if st.button(f"JOB-{job_no}", key=f"btn_m_no_{jid}"):
                 show_jobsheet_spec_modal(j)
+            st.markdown('</div>', unsafe_allow_html=True)
 
         with r_date:
-            st.markdown(f"<div class='tbl-cell-text'>{created_date}</div>", unsafe_allow_html=True)
+            st.markdown('<div class="row-clickable-cell">', unsafe_allow_html=True)
+            if st.button(created_date, key=f"btn_m_dt_{jid}"):
+                show_jobsheet_spec_modal(j)
+            st.markdown('</div>', unsafe_allow_html=True)
 
         with r_client:
-            st.markdown(f"<div class='tbl-cell-text' title='{client_name}'>{client_name}</div>", unsafe_allow_html=True)
+            st.markdown('<div class="row-clickable-cell">', unsafe_allow_html=True)
+            if st.button(client_name, key=f"btn_m_cl_{jid}", help=client_name):
+                show_jobsheet_spec_modal(j)
+            st.markdown('</div>', unsafe_allow_html=True)
 
         with r_contact:
-            st.markdown(f"<div class='tbl-cell-text' title='{contact_p} ({contact_ph})'>{contact_p} <span style='color:#64748b; font-size:11px;'>({contact_ph})</span></div>", unsafe_allow_html=True)
+            contact_label = f"{contact_p} ({contact_ph})" if contact_ph != "N/A" else contact_p
+            st.markdown('<div class="row-clickable-cell">', unsafe_allow_html=True)
+            if st.button(contact_label, key=f"btn_m_cp_{jid}", help=contact_label):
+                show_jobsheet_spec_modal(j)
+            st.markdown('</div>', unsafe_allow_html=True)
 
         with r_due:
-            st.markdown(f"<div class='tbl-cell-text'>{due_date_str}</div>", unsafe_allow_html=True)
+            st.markdown('<div class="row-clickable-cell">', unsafe_allow_html=True)
+            if st.button(due_date_str, key=f"btn_m_due_{jid}"):
+                show_jobsheet_spec_modal(j)
+            st.markdown('</div>', unsafe_allow_html=True)
 
         with r_act:
             action_choice = st.selectbox(
