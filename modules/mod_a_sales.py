@@ -509,7 +509,29 @@ def render(user):
         end_idx = min(start_idx + ROWS_PER_PAGE, total_records)
         page_records = filtered_jobs[start_idx:end_idx]
 
-        st.caption(f"Showing **{start_idx + 1 if total_records else 0} to {end_idx}** of **{total_records}** records")
+          # Identify ticked jobs across the currently displayed page
+        selected_job_ids = [
+            j["job_id"] for j in page_records 
+            if st.session_state.get(f"tbl_chk_{j['job_id']}", False)
+        ]
+
+        # Top Bar: Record Counter & Conditional Bulk Delete Button
+        bar_col1, bar_col2 = st.columns([7, 3])
+        with bar_col1:
+            st.caption(f"Showing **{start_idx + 1 if total_records else 0} to {end_idx}** of **{total_records}** records")[cite: 32]
+        with bar_col2:
+            if selected_job_ids:
+                with st.popover(f"Delete Selected ({len(selected_job_ids)})", use_container_width=True):
+                    st.warning(f"Permanently delete {len(selected_job_ids)} selected job(s)?")
+                    if st.button("Confirm Bulk Delete", type="primary", use_container_width=True, key="btn_bulk_del_confirm"):
+                        for del_jid in selected_job_ids:
+                            delete_job_sheet(del_jid)[cite: 28]
+                            # Clean up checkbox session state
+                            if f"tbl_chk_{del_jid}" in st.session_state:
+                                del st.session_state[f"tbl_chk_{del_jid}"]
+                        log_audit(user["user_id"], "BULK_DELETE", f"Deleted jobs: {selected_job_ids}")[cite: 28]
+                        st.success(f"{len(selected_job_ids)} job(s) deleted successfully.")
+                        st.rerun()
 
         if not page_records:
             st.info("No matching job orders found.")
@@ -550,11 +572,11 @@ def render(user):
                 </style>
             """, unsafe_allow_html=True)
 
-            # Table Header Bar
+            # Table Header Bar (Blank space instead of '[ ]')
             st.markdown("""
                 <div class="adnet-table-header" style="padding: 10px 14px;">
                     <div style="display: grid; grid-template-columns: 0.3fr 1fr 1fr 1.8fr 1.6fr 1.1fr 0.9fr 1.3fr 1.6fr; align-items: center; gap: 8px;">
-                        <div class="tbl-cell-header">[ ]</div>
+                        <div class="tbl-cell-header">&nbsp;</div>
                         <div class="tbl-cell-header">Job No.</div>
                         <div class="tbl-cell-header">Date</div>
                         <div class="tbl-cell-header">Client</div>
