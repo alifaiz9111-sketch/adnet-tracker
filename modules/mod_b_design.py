@@ -218,7 +218,6 @@ def render(user):
         st.info("No matching design approval orders found.")
         return
 
-    # --- Typography CSS ---
     st.markdown("""
         <style>
         .tbl-cell-header {
@@ -229,39 +228,74 @@ def render(user):
             letter-spacing: 0.3px;
             text-transform: uppercase;
         }
-
-        /* Strip all borders, backgrounds, and shadows from row text buttons */
-        div.row-clickable-cell button,
-        div.row-clickable-cell button[data-testid="baseButton-secondary"],
-        div.row-clickable-cell button:hover,
-        div.row-clickable-cell button:focus,
-        div.row-clickable-cell button:active {
-            border: 0px solid transparent !important;
-            border-color: transparent !important;
-            outline: none !important;
-            box-shadow: none !important;
+        .tbl-cell-text {
+            font-size: 13px !important;
+            font-family: inherit !important;
+            color: #1e293b !important;
+            font-weight: 500 !important;
+            line-height: 1.4 !important;
+            display: flex;
+            align-items: center;
+            height: 38px;
+            margin: 0 !important;
+            padding: 0 !important;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            cursor: pointer;
+        }
+        .tbl-cell-text:hover {
+            color: #E11D48 !important;
+        }
+        /* Make the checkbox align vertically in the middle */
+        div[data-testid="stCheckbox"] {
+            display: flex;
+            align-items: center;
+            height: 38px;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        div[data-testid="stCheckbox"] label {
+            margin-bottom: 0 !important;
+        }
+        /* Make the action dropdown align vertically in the middle */
+        div[data-testid="stSelectbox"] {
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
+        }
+        /* Invisible overlay button */
+        .inv-cell-btn button,
+        .inv-cell-btn button[data-testid="baseButton-tertiary"] {
+            border: none !important;
             background: transparent !important;
-            background-color: transparent !important;
             color: #1e293b !important;
             font-size: 13px !important;
             font-weight: 500 !important;
             font-family: inherit !important;
             text-align: left !important;
             justify-content: flex-start !important;
-            padding: 6px 0px !important;
+            align-items: center !important;
+            display: flex !important;
+            height: 38px !important;
+            min-height: 38px !important;
+            max-height: 38px !important;
+            padding: 0 !important;
             margin: 0 !important;
-            min-height: 0px !important;
-            height: auto !important;
+            box-shadow: none !important;
             width: 100% !important;
+            line-height: 1.4 !important;
             white-space: nowrap !important;
             overflow: hidden !important;
             text-overflow: ellipsis !important;
         }
-
-        /* Subtle hover feedback without any frame/box */
-        div.row-clickable-cell button:hover {
+        .inv-cell-btn button:hover {
             color: #E11D48 !important;
-            text-decoration: underline !important;
+            background: transparent !important;
+        }
+        .inv-cell-btn div[data-testid="stButton"] {
+            margin: 0 !important;
+            padding: 0 !important;
+            height: 38px !important;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -282,6 +316,7 @@ def render(user):
     """, unsafe_allow_html=True)
 
     # --- Table Data Rows ---
+    # --- Table Data Rows ---
     for j in page_records:
         jid = j["job_id"]
         job_no = j.get("job_no", str(jid))
@@ -290,41 +325,42 @@ def render(user):
         contact_p = j.get("contact_person") or "N/A"
         contact_ph = j.get("contact_phone") or "N/A"
         due_date_str = str(j.get("due_date") or "N/A")
+        contact_label = f"{contact_p} ({contact_ph})" if contact_ph != "N/A" else contact_p
 
         r_chk, r_no, r_date, r_client, r_contact, r_due, r_act = st.columns(
-            [0.3, 1.1, 1.1, 2.3, 2.1, 1.3, 1.8]
+            [0.3, 1.1, 1.1, 2.3, 2.1, 1.3, 1.8],
+            vertical_alignment="center"
         )
 
         with r_chk:
             st.checkbox(" ", key=f"des_chk_{jid}", label_visibility="collapsed")
 
         with r_no:
-            st.markdown('<div class="row-clickable-cell">', unsafe_allow_html=True)
+            st.markdown('<div class="inv-cell-btn">', unsafe_allow_html=True)
             if st.button(f"JOB-{job_no}", key=f"btn_m_no_{jid}", type="tertiary"):
                 show_jobsheet_spec_modal(j)
             st.markdown('</div>', unsafe_allow_html=True)
 
         with r_date:
-            st.markdown('<div class="row-clickable-cell">', unsafe_allow_html=True)
+            st.markdown('<div class="inv-cell-btn">', unsafe_allow_html=True)
             if st.button(created_date, key=f"btn_m_dt_{jid}", type="tertiary"):
                 show_jobsheet_spec_modal(j)
             st.markdown('</div>', unsafe_allow_html=True)
 
         with r_client:
-            st.markdown('<div class="row-clickable-cell">', unsafe_allow_html=True)
+            st.markdown('<div class="inv-cell-btn">', unsafe_allow_html=True)
             if st.button(client_name, key=f"btn_m_cl_{jid}", type="tertiary", help=client_name):
                 show_jobsheet_spec_modal(j)
             st.markdown('</div>', unsafe_allow_html=True)
 
         with r_contact:
-            contact_label = f"{contact_p} ({contact_ph})" if contact_ph != "N/A" else contact_p
-            st.markdown('<div class="row-clickable-cell">', unsafe_allow_html=True)
+            st.markdown('<div class="inv-cell-btn">', unsafe_allow_html=True)
             if st.button(contact_label, key=f"btn_m_cp_{jid}", type="tertiary", help=contact_label):
                 show_jobsheet_spec_modal(j)
             st.markdown('</div>', unsafe_allow_html=True)
 
         with r_due:
-            st.markdown('<div class="row-clickable-cell">', unsafe_allow_html=True)
+            st.markdown('<div class="inv-cell-btn">', unsafe_allow_html=True)
             if st.button(due_date_str, key=f"btn_m_due_{jid}", type="tertiary"):
                 show_jobsheet_spec_modal(j)
             st.markdown('</div>', unsafe_allow_html=True)
