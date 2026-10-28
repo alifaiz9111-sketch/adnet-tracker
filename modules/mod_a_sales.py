@@ -606,7 +606,7 @@ def render(user):
                 with r_prog:
                     st.markdown(
                         f"<div class='adnet-progress-circle-red' style='background: conic-gradient(#13b0b3 {pct}%, #e2e8f0 0); border: 2px solid #ffffff;'>"
-                        f"<div style='background: #ffffff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #13b0b3; font-size: 10px; font-weight: 700;'>"
+                        f"<div style='background: #ffffff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #BE123C; font-size: 10px; font-weight: 700;'>"
                         f"{pct}%</div></div>",
                         unsafe_allow_html=True
                     )
@@ -622,7 +622,7 @@ def render(user):
                 with r_act:
                     action_choice = st.selectbox(
                         "Action",
-                        options=["_", "Edit", "Delete"],
+                        options=["  ", "Edit", "Delete"],
                         index=0,
                         key=f"act_drp_{jid}",
                         label_visibility="collapsed"
