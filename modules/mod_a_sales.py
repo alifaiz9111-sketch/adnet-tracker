@@ -64,9 +64,55 @@ def render(user):
     t_create, t_history = st.tabs(["Create New Jobsheet", "Order History & Modifications"])
 
     # =========================================================
-    # TAB 1: CREATE NEW JOBSHEET
+    # TAB 1: CREATE NEW JOBSHEET (MODERN DARK THEME)
     # =========================================================
     with t_create:
+        # Styles for the left stepper navigation rail
+        st.markdown("""
+            <style>
+            .stepper-container {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                padding-top: 10px;
+            }
+            .stepper-item {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                font-size: 13px;
+                font-weight: 500;
+                color: #94a3b8;
+            }
+            .stepper-item.active {
+                color: #f8fafc;
+                font-weight: 600;
+            }
+            .step-dot {
+                width: 14px;
+                height: 14px;
+                border-radius: 50%;
+                border: 2px solid #475569;
+                background-color: transparent;
+                display: inline-block;
+            }
+            .step-dot.active {
+                background-color: #E11D48;
+                border-color: #E11D48;
+                box-shadow: 0 0 10px rgba(225, 29, 72, 0.5);
+            }
+            .step-line {
+                width: 2px;
+                height: 32px;
+                background-color: #334155;
+                margin-left: 6px;
+            }
+            .step-line.active {
+                background-color: #E11D48;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
         suggested_no = get_next_job_no()
 
         if "sales_items" not in st.session_state:
@@ -87,277 +133,329 @@ def render(user):
                 if itm.get("dim_unit") not in ["Inch", "Ft"]:
                     itm["dim_unit"] = "Inch"
 
-        with st.container(border=True):
-            st.markdown("#### 1. Client & Commercial Header")
-            
-            billing_choice = st.radio(
-                "Billing Classification *",
-                options=["Non-GST Bill", "GST Invoice (B2B Tax Invoice)"],
-                index=0,
-                horizontal=True,
-                key="s_billing_mode"
-            )
-            is_gst = "GST Invoice" in billing_choice
+        st.markdown("### Jobsheet Creation Form")
 
-            billing_address = st.text_input(
-                "Billing Address" + (" *" if is_gst else " (Optional)"),
-                placeholder="e.g. 12/A Park Street, Kolkata - 700016",
-                key="s_baddr"
-            ).strip()
+        # Layout: Left Stepper Navigation Rail, Right Form Sections
+        rail_col, form_col = st.columns([1.5, 8.5])
 
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                st.text_input(
-                    "Jobsheet Number (Auto-Generated) *",
-                    value=f"#{suggested_no}",
-                    disabled=True,
-                    key="s_job_no_disp"
-                )
-                client_name = st.text_input(
-                    "Client / Corporate Entity *",
-                    placeholder="e.g. Apollo Hospitals",
-                    key="s_client"
-                ).strip()
-            with c2:
-                contact_person = st.text_input(
-                    "Contact Person",
-                    placeholder="e.g. Amitava Ghosh",
-                    key="s_contact"
-                ).strip()
-                contact_phone = st.text_input(
-                    "Mobile / Contact Number",
-                    placeholder="e.g. 9830112233",
-                    key="s_phone"
-                ).strip()
-            with c3:
-                due_date = st.date_input(
-                    "Target Delivery Date *",
-                    min_value=date.today(),
-                    key="s_due"
-                )
-                routed_desk = st.selectbox(
-                    "Routing Workflow Target *",
-                    options=["DESIGN", "PAYMENT", "PRODUCTION"],
-                    format_func=lambda x: {
-                        "DESIGN": "Send to Design & Proofs",
-                        "PAYMENT": "Direct to Accounts / Advance",
-                        "PRODUCTION": "Skip to Production Floor",
-                    }.get(x, x),
-                    key="s_route",
-                )
+        with rail_col:
+            st.markdown("""
+                <div class="stepper-container">
+                    <div class="stepper-item active">
+                        <span class="step-dot active"></span>
+                        <span>1. Client Details</span>
+                    </div>
+                    <div class="step-line active"></div>
+                    <div class="stepper-item">
+                        <span class="step-dot"></span>
+                        <span>2. Item & Specifications</span>
+                    </div>
+                    <div class="step-line"></div>
+                    <div class="stepper-item">
+                        <span class="step-dot"></span>
+                        <span>3. Commercials</span>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
 
-            gstin = ""
-            place_of_supply = "19 - West Bengal"
-
-            if is_gst:
-                st.markdown("##### GST Compliance Information")
-                gc1, gc2 = st.columns([1, 1])
-                with gc1:
-                    gstin = st.text_input(
-                        "Client GSTIN *",
-                        placeholder="e.g. 19AAAAA0000A1Z5",
-                        key="s_gstin"
-                    ).strip().upper()
-                with gc2:
-                    place_of_supply = st.selectbox(
-                        "Place of Supply (State) *",
-                        options=[
-                            "19 - West Bengal",
-                            "10 - Bihar",
-                            "20 - Jharkhand",
-                            "21 - Odisha",
-                            "18 - Assam",
-                            "07 - Delhi",
-                            "27 - Maharashtra",
-                            "Other State"
-                        ],
-                        key="s_pos"
-                    )
-
-            target_designer = "OPEN_POOL"
-            if routed_desk == "DESIGN":
-                designers_list = get_all_designers()
-                des_options = ["Broadcast to All Designers (Open Claim)"] + [
-                    f"{d['full_name']} (@{d['username']})" for d in designers_list
-                ]
-                chosen = st.selectbox("Assign Designer *", options=des_options, key="s_des_choice")
-                if "Broadcast" not in chosen:
-                    target_designer = chosen.split(" (@")[0].strip()
-
-        st.markdown("---")
-        st.markdown("#### 2. Commercial Line Items & Specs")
-
-        btn_col1, _ = st.columns([1, 4])
-        with btn_col1:
-            if st.button("Add Item Row", use_container_width=True):
-                st.session_state.sales_items.append({
-                    "item_name": "",
-                    "length": 1.0,
-                    "breadth": 1.0,
-                    "height": 1.0,
-                    "dim_unit": "Inch",
-                    "quantity": 0.0,
-                    "rate": 0.0,
-                    "amount": 0.0,
-                    "specifications": "",
-                    "delivery_address": "",
-                })
-                st.rerun()
-
-        rows_to_remove = []
-        for idx, item in enumerate(st.session_state.sales_items):
+        with form_col:
+            # SECTION 1: CLIENT & COMMERCIAL HEADER
             with st.container(border=True):
-                top_c1, top_c2 = st.columns([5.5, 0.5])
-                with top_c1:
-                    item["item_name"] = st.text_input(
-                        f"Item Name #{idx+1} *",
-                        value=item.get("item_name", ""),
-                        placeholder="e.g. Backlit Flex Signboard",
-                        key=f"item_name_{idx}",
-                    )
-                with top_c2:
-                    if len(st.session_state.sales_items) > 1:
-                        if st.button("X", key=f"del_row_{idx}"):
-                            rows_to_remove.append(idx)
+                st.markdown("#### 1. Client & Commercial Header")
 
-                st.caption("Sizes / Dimensions (Default: 1 x 1 x 1):")
-                s_c1, s_c2, s_c3, s_c4 = st.columns(4)
-                with s_c1:
-                    item["length"] = st.number_input(
-                        "Length (L)",
-                        min_value=0.0,
-                        value=float(item.get("length", 1.0)),
-                        step=1.0,
-                        key=f"item_len_{idx}",
-                        on_change=_recalc_on_dim_change,
-                        args=(idx,),
+                # Row 1: Billing Classification (Left) & Jobsheet Number (Right)
+                r1_c1, r1_c2 = st.columns([6, 4])
+                with r1_c1:
+                    billing_choice = st.radio(
+                        "Billing Classification *",
+                        options=["Non-GST Bill", "GST Invoice (B2B Tax Invoice)"],
+                        index=0,
+                        horizontal=True,
+                        key="s_billing_mode"
                     )
-                with s_c2:
-                    item["breadth"] = st.number_input(
-                        "Breadth / Width (B)",
-                        min_value=0.0,
-                        value=float(item.get("breadth", 1.0)),
-                        step=1.0,
-                        key=f"item_brd_{idx}",
-                        on_change=_recalc_on_dim_change,
-                        args=(idx,),
-                    )
-                with s_c3:
-                    item["height"] = st.number_input(
-                        "Height / Depth (H)",
-                        min_value=0.0,
-                        value=float(item.get("height", 1.0)),
-                        step=0.5,
-                        key=f"item_hgt_{idx}",
-                        on_change=_recalc_on_dim_change,
-                        args=(idx,),
-                    )
-                with s_c4:
-                    unit_options = ["Inch", "Ft"]
-                    cur_u = item.get("dim_unit", "Inch")
-                    u_idx = unit_options.index(cur_u) if cur_u in unit_options else 0
-                    item["dim_unit"] = st.selectbox(
-                        "Size Unit",
-                        unit_options,
-                        index=u_idx,
-                        key=f"item_dunit_{idx}",
+                    is_gst = "GST Invoice" in billing_choice
+                with r1_c2:
+                    st.text_input(
+                        "Jobsheet Number (Auto-Generated) *",
+                        value=f"#{suggested_no}",
+                        disabled=True,
+                        key="s_job_no_disp"
                     )
 
-                st.caption("Commercials (Fill any 2 fields to auto-calculate the 3rd):")
-                r_c1, r_c2, r_c3 = st.columns(3)
-                with r_c1:
-                    item["quantity"] = st.number_input(
-                        "Quantity",
-                        min_value=0.0,
-                        value=float(item.get("quantity", 0.0)),
-                        step=1.0,
-                        key=f"item_qty_{idx}",
-                        on_change=_sync_commercials,
-                        args=(idx, "qty"),
+                # Row 2: Billing Address (Left) & Target Delivery Date / Routing Workflow Target (Right)
+                r2_c1, r2_c2, r2_c3 = st.columns([6, 2, 2])
+                with r2_c1:
+                    billing_address = st.text_input(
+                        "Billing Address" + (" *" if is_gst else " (Optional)"),
+                        placeholder="e.g. 12/A Park Street, Kolkata - 700016",
+                        key="s_baddr"
+                    ).strip()
+                with r2_c2:
+                    due_date = st.date_input(
+                        "Target Delivery Date *",
+                        min_value=date.today(),
+                        key="s_due"
                     )
-                with r_c2:
-                    item["rate"] = st.number_input(
-                        "Rate (INR)",
-                        min_value=0.0,
-                        value=float(item.get("rate", 0.0)),
-                        step=10.0,
-                        key=f"item_rate_{idx}",
-                        on_change=_sync_commercials,
-                        args=(idx, "rate"),
-                    )
-                with r_c3:
-                    item["amount"] = st.number_input(
-                        "Total Amount (INR)",
-                        min_value=0.0,
-                        value=float(item.get("amount", 0.0)),
-                        step=50.0,
-                        key=f"item_amt_{idx}",
-                        on_change=_sync_commercials,
-                        args=(idx, "amount"),
+                with r2_c3:
+                    routed_desk = st.selectbox(
+                        "Routing Workflow Target *",
+                        options=["DESIGN", "PAYMENT", "PRODUCTION"],
+                        format_func=lambda x: {
+                            "DESIGN": "Send to Design & Proofs",
+                            "PAYMENT": "Direct to Accounts / Advance",
+                            "PRODUCTION": "Skip to Production Floor",
+                        }.get(x, x),
+                        key="s_route",
                     )
 
-                d_c1, d_c2 = st.columns(2)
-                with d_c1:
-                    item["specifications"] = st.text_input(
-                        "Technical Specifications / Material Notes",
-                        value=item.get("specifications", ""),
-                        placeholder="e.g. 5mm Clear Acrylic, 3M vinyl, LED modules",
-                        key=f"item_spec_{idx}",
+                # Row 3: Client Entity, Contact, Phone, and Assigned Designer
+                r3_c1, r3_c2, r3_c3, r3_c4 = st.columns([2.5, 2.5, 2.5, 2.5])
+                with r3_c1:
+                    client_name = st.text_input(
+                        "Client / Corporate Entity *",
+                        placeholder="e.g. Apollo Hospitals",
+                        key="s_client"
+                    ).strip()
+                with r3_c2:
+                    contact_person = st.text_input(
+                        "Contact Person",
+                        placeholder="e.g. Amitava Ghosh",
+                        key="s_contact"
+                    ).strip()
+                with r3_c3:
+                    contact_phone = st.text_input(
+                        "Mobile / Contact Number",
+                        placeholder="e.g. 9830112233",
+                        key="s_phone"
+                    ).strip()
+                with r3_c4:
+                    target_designer = "OPEN_POOL"
+                    designers_list = get_all_designers()
+                    des_options = ["Broadcast to All Designers (Open Claim)"] + [
+                        f"{d['full_name']} (@{d['username']})" for d in designers_list
+                    ]
+                    chosen = st.selectbox("Assign Designer *", options=des_options, key="s_des_choice")
+                    if "Broadcast" not in chosen:
+                        target_designer = chosen.split(" (@")[0].strip()
+
+                gstin = ""
+                place_of_supply = "19 - West Bengal"
+
+                if is_gst:
+                    st.markdown("##### GST Compliance Information")
+                    gc1, gc2 = st.columns([1, 1])
+                    with gc1:
+                        gstin = st.text_input(
+                            "Client GSTIN *",
+                            placeholder="e.g. 19AAAAA0000A1Z5",
+                            key="s_gstin"
+                        ).strip().upper()
+                    with gc2:
+                        place_of_supply = st.selectbox(
+                            "Place of Supply (State) *",
+                            options=[
+                                "19 - West Bengal",
+                                "10 - Bihar",
+                                "20 - Jharkhand",
+                                "21 - Odisha",
+                                "18 - Assam",
+                                "07 - Delhi",
+                                "27 - Maharashtra",
+                                "Other State"
+                            ],
+                            key="s_pos"
+                        )
+
+            # SECTION 2: COMMERCIAL LINE ITEMS & SPECS
+            with st.container(border=True):
+                head_c1, head_c2 = st.columns([7, 3])
+                with head_c1:
+                    st.markdown("#### 2. Commercial Line Items & Specs")
+                with head_c2:
+                    st.markdown("<div style='text-align: right;'>", unsafe_allow_html=True)
+                    if st.button("+ Add Item Row", key="btn_add_item_top", use_container_width=True):
+                        st.session_state.sales_items.append({
+                            "item_name": "",
+                            "length": 1.0,
+                            "breadth": 1.0,
+                            "height": 1.0,
+                            "dim_unit": "Inch",
+                            "quantity": 0.0,
+                            "rate": 0.0,
+                            "amount": 0.0,
+                            "specifications": "",
+                            "delivery_address": "",
+                        })
+                        st.rerun()
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                rows_to_remove = []
+                for idx, item in enumerate(st.session_state.sales_items):
+                    with st.container(border=True):
+                        top_c1, top_c2 = st.columns([9.2, 0.8])
+                        with top_c1:
+                            item["item_name"] = st.text_input(
+                                f"Item Name #{idx+1} *",
+                                value=item.get("item_name", ""),
+                                placeholder="e.g. Backlit Flex Signboard",
+                                key=f"item_name_{idx}",
+                            )
+                        with top_c2:
+                            if len(st.session_state.sales_items) > 1:
+                                st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                                if st.button("X", key=f"del_row_{idx}", help="Remove Item"):
+                                    rows_to_remove.append(idx)
+
+                        st.caption("Sizes / Dimensions (Default: 1 x 1 x 1):")
+                        s_c1, s_c2, s_c3, s_c4 = st.columns(4)
+                        with s_c1:
+                            item["length"] = st.number_input(
+                                "Length (L)",
+                                min_value=0.0,
+                                value=float(item.get("length", 1.0)),
+                                step=1.0,
+                                key=f"item_len_{idx}",
+                                on_change=_recalc_on_dim_change,
+                                args=(idx,),
+                            )
+                        with s_c2:
+                            item["breadth"] = st.number_input(
+                                "Breadth / Width (B)",
+                                min_value=0.0,
+                                value=float(item.get("breadth", 1.0)),
+                                step=1.0,
+                                key=f"item_brd_{idx}",
+                                on_change=_recalc_on_dim_change,
+                                args=(idx,),
+                            )
+                        with s_c3:
+                            item["height"] = st.number_input(
+                                "Height / Depth (H)",
+                                min_value=0.0,
+                                value=float(item.get("height", 1.0)),
+                                step=0.5,
+                                key=f"item_hgt_{idx}",
+                                on_change=_recalc_on_dim_change,
+                                args=(idx,),
+                            )
+                        with s_c4:
+                            unit_options = ["Inch", "Ft"]
+                            cur_u = item.get("dim_unit", "Inch")
+                            u_idx = unit_options.index(cur_u) if cur_u in unit_options else 0
+                            item["dim_unit"] = st.selectbox(
+                                "Size Unit",
+                                unit_options,
+                                index=u_idx,
+                                key=f"item_dunit_{idx}",
+                            )
+
+                        st.caption("Commercials (Fill any 2 fields to auto-calculate the 3rd):")
+                        r_c1, r_c2, r_c3 = st.columns(3)
+                        with r_c1:
+                            item["quantity"] = st.number_input(
+                                "Quantity",
+                                min_value=0.0,
+                                value=float(item.get("quantity", 0.0)),
+                                step=1.0,
+                                key=f"item_qty_{idx}",
+                                on_change=_sync_commercials,
+                                args=(idx, "qty"),
+                            )
+                        with r_c2:
+                            item["rate"] = st.number_input(
+                                "Rate (INR)",
+                                min_value=0.0,
+                                value=float(item.get("rate", 0.0)),
+                                step=10.0,
+                                key=f"item_rate_{idx}",
+                                on_change=_sync_commercials,
+                                args=(idx, "rate"),
+                            )
+                        with r_c3:
+                            item["amount"] = st.number_input(
+                                "Total Amount (INR)",
+                                min_value=0.0,
+                                value=float(item.get("amount", 0.0)),
+                                step=50.0,
+                                key=f"item_amt_{idx}",
+                                on_change=_sync_commercials,
+                                args=(idx, "amount"),
+                            )
+
+                        d_c1, d_c2 = st.columns(2)
+                        with d_c1:
+                            item["specifications"] = st.text_input(
+                                "Technical Specifications / Material Notes",
+                                value=item.get("specifications", ""),
+                                placeholder="e.g. 5mm Clear Acrylic, 3M vinyl, LED modules",
+                                key=f"item_spec_{idx}",
+                            )
+                        with d_c2:
+                            item["delivery_address"] = st.text_input(
+                                "Delivery Address / Branch Location",
+                                value=item.get("delivery_address", ""),
+                                placeholder="e.g. Salt Lake Sector V Office",
+                                key=f"item_addr_{idx}",
+                            )
+
+                if rows_to_remove:
+                    for r_idx in sorted(rows_to_remove, reverse=True):
+                        st.session_state.sales_items.pop(r_idx)
+                    st.rerun()
+
+            # SECTION 3: BOTTOM GRAND TOTAL & DISPATCH BAR
+            grand_total = sum(float(it.get("amount", 0.0)) for it in st.session_state.sales_items)
+
+            with st.container(border=True):
+                sub_col1, sub_col2 = st.columns([7, 3])
+                with sub_col1:
+                    st.markdown(
+                        f"<div style='font-size: 20px; font-weight: 700; color: #f8fafc; padding-top: 6px;'>"
+                        f"Grand Total Order Value: <span style='color: #ffffff;'>INR {grand_total:,.2f}</span>"
+                        f"</div>",
+                        unsafe_allow_html=True
                     )
-                with d_c2:
-                    item["delivery_address"] = st.text_input(
-                        "Delivery Address / Branch Location",
-                        value=item.get("delivery_address", ""),
-                        placeholder="e.g. Salt Lake Sector V Office",
-                        key=f"item_addr_{idx}",
-                    )
+                with sub_col2:
+                    submit_clicked = st.button("Submit & Dispatch Jobsheet", type="primary", use_container_width=True)
 
-        if rows_to_remove:
-            for r_idx in sorted(rows_to_remove, reverse=True):
-                st.session_state.sales_items.pop(r_idx)
-            st.rerun()
+            if submit_clicked:
+                universal_job_no = get_next_job_no()
+                c_name = str(client_name).strip() if client_name else ""
+                c_person = str(contact_person).strip() if contact_person else "Direct Client"
+                c_phone = str(contact_phone).strip() if contact_phone else "N/A"
 
-        grand_total = sum(float(it.get("amount", 0.0)) for it in st.session_state.sales_items)
-        st.markdown(f"### Grand Total Order Value: `INR {grand_total:,.2f}`")
+                if not c_name:
+                    st.error("Please fill in mandatory field: Client / Corporate Entity")
+                elif is_gst and (not gstin or len(gstin) < 15):
+                    st.error("Please provide a valid 15-character GSTIN for GST Tax Invoices.")
+                elif is_gst and not billing_address:
+                    st.error("Registered Billing Address is required for GST Tax Invoices.")
+                elif any(not it.get("item_name", "").strip() for it in st.session_state.sales_items):
+                    st.error("Please ensure every added line item has a valid name.")
+                else:
+                    header_payload = {
+                        "job_no": universal_job_no,
+                        "client_name": c_name,
+                        "contact_person": c_person,
+                        "contact_phone": c_phone,
+                        "due_date": str(due_date),
+                        "order_taken_by": user["full_name"],
+                        "current_stage": routed_desk,
+                        "assigned_designer": target_designer if routed_desk == "DESIGN" else None,
+                        "is_returned": False,
+                        "billing_type": "GST" if is_gst else "NON_GST",
+                        "gstin": gstin if is_gst else None,
+                        "billing_address": billing_address if is_gst else None,
+                        "place_of_supply": place_of_supply if is_gst else None,
+                        "is_billed": False,
+                    }
 
-        if st.button("Submit & Dispatch Jobsheet", type="primary", use_container_width=True):
-            universal_job_no = get_next_job_no()
-            c_name = str(client_name).strip() if client_name else ""
-            c_person = str(contact_person).strip() if contact_person else "Direct Client"
-            c_phone = str(contact_phone).strip() if contact_phone else "N/A"
-
-            if not c_name:
-                st.error("Please fill in mandatory field: Client / Corporate Entity")
-            elif is_gst and (not gstin or len(gstin) < 15):
-                st.error("Please provide a valid 15-character GSTIN for GST Tax Invoices.")
-            elif is_gst and not billing_address:
-                st.error("Registered Billing Address is required for GST Tax Invoices.")
-            elif any(not it.get("item_name", "").strip() for it in st.session_state.sales_items):
-                st.error("Please ensure every added line item has a valid name.")
-            else:
-                header_payload = {
-                    "job_no": universal_job_no,
-                    "client_name": c_name,
-                    "contact_person": c_person,
-                    "contact_phone": c_phone,
-                    "due_date": str(due_date),
-                    "order_taken_by": user["full_name"],
-                    "current_stage": routed_desk,
-                    "assigned_designer": target_designer if routed_desk == "DESIGN" else None,
-                    "is_returned": False,
-                    "billing_type": "GST" if is_gst else "NON_GST",
-                    "gstin": gstin if is_gst else None,
-                    "billing_address": billing_address if is_gst else None,
-                    "place_of_supply": place_of_supply if is_gst else None,
-                    "is_billed": False,
-                }
-
-                prepared_items = []
-                for it in st.session_state.sales_items:
-                    size_str = f"Size: {it.get('length', 1.0)} x {it.get('breadth', 1.0)} x {it.get('height', 1.0)} {it.get('dim_unit', 'Inch')}"
-                    full_spec = it.get("specifications", "").strip()
-                    if size_str:
-                        full_spec = f"{size_str} | {full_spec}" if full_spec else size_str
+                    prepared_items = []
+                    for it in st.session_state.sales_items:
+                        size_str = f"Size: {it.get('length', 1.0)} x {it.get('breadth', 1.0)} x {it.get('height', 1.0)} {it.get('dim_unit', 'Inch')}"
+                        full_spec = it.get("specifications", "").strip()
+                        if size_str:
+                            full_spec = f"{size_str} | {full_spec}" if full_spec else size_str
 
                     prepared_items.append({
                         "item_name": it["item_name"].strip(),
@@ -369,31 +467,31 @@ def render(user):
                         "delivery_address": it.get("delivery_address", "").strip(),
                     })
 
-                ok, msg = create_job_sheet(header_payload, prepared_items)
-                if ok:
-                    try:
-                        from email_service import send_new_jobsheet_alert
-                        send_new_jobsheet_alert(header_payload, prepared_items)
-                    except Exception:
-                        pass
+                    ok, msg = create_job_sheet(header_payload, prepared_items)
+                    if ok:
+                        try:
+                            from email_service import send_new_jobsheet_alert
+                            send_new_jobsheet_alert(header_payload, prepared_items)
+                        except Exception:
+                            pass
 
-                    des_msg = f" (Assigned to: `{target_designer}`)" if routed_desk == "DESIGN" else ""
-                    st.success(f"Job Sheet #{universal_job_no} created successfully and routed to `{routed_desk}`{des_msg}!")
-                    st.session_state.sales_items = [{
-                        "item_name": "",
-                        "length": 1.0,
-                        "breadth": 1.0,
-                        "height": 1.0,
-                        "dim_unit": "Inch",
-                        "quantity": 0.0,
-                        "rate": 0.0,
-                        "amount": 0.0,
-                        "specifications": "",
-                        "delivery_address": "",
-                    }]
-                    st.rerun()
-                else:
-                    st.error(f"Failed to create jobsheet: {msg}")
+                        des_msg = f" (Assigned to: `{target_designer}`)" if routed_desk == "DESIGN" else ""
+                        st.success(f"Job Sheet #{universal_job_no} created successfully and routed to `{routed_desk}`{des_msg}!")
+                        st.session_state.sales_items = [{
+                            "item_name": "",
+                            "length": 1.0,
+                            "breadth": 1.0,
+                            "height": 1.0,
+                            "dim_unit": "Inch",
+                            "quantity": 0.0,
+                            "rate": 0.0,
+                            "amount": 0.0,
+                            "specifications": "",
+                            "delivery_address": "",
+                        }]
+                        st.rerun()
+                    else:
+                        st.error(f"Failed to create jobsheet: {msg}")
 
     # =========================================================
     # TAB 2: ORDER HISTORY & MODIFICATIONS (15-ROW PAGINATED TABLE)
