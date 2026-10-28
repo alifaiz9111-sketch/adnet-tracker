@@ -9,6 +9,44 @@ from database import (
     log_audit,
 )
 
+@st.dialog("Jobsheet Details")
+def show_jobsheet_spec_modal(job):
+    """Displays jobsheet particulars and pre-press specifications with all monetary values masked."""
+    items = get_job_items(job["job_id"])
+    
+    # 1. Header Information
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(f"**Job No:** `JOB-{job.get('job_no')}`")
+        st.markdown(f"**Client:** {job.get('client_name') or 'N/A'}")
+        st.caption(f"Contact Person: {job.get('contact_person') or 'N/A'}")
+        st.caption(f"Phone: {job.get('contact_phone') or 'N/A'}")
+    with c2:
+        st.markdown(f"**Target Due Date:** {job.get('due_date') or 'N/A'}")
+        st.markdown(f"**Booked By:** {job.get('order_taken_by') or 'Sales'}")
+        st.caption(f"Assigned Artist: `{job.get('assigned_designer') or 'Unassigned'}`")
+
+    if job.get("is_returned"):
+        st.error(f"Return / Flagged Notice: {job.get('return_reason')}")
+
+    st.markdown("---")
+    st.markdown("##### Pre-Press Items & Specifications")
+
+    if not items:
+        st.info("No line items logged for this order.")
+    else:
+        for idx, it in enumerate(items, 1):
+            with st.container(border=True):
+                st.markdown(f"**{idx}. {it.get('item_name')}** — Quantity: `{it.get('quantity')} {it.get('unit')}`")
+                spec_text = it.get("specifications") or "No technical notes entered."
+                st.caption("Technical Notes / Sizes:")
+                st.code(spec_text, language="markdown")
+                if it.get("delivery_address"):
+                    st.caption(f"Destination: {it.get('delivery_address')}")
+
+    st.markdown("---")
+    st.caption("Commercial rates, item values, and order amounts are masked for Pre-Press & Design.")
+
 
 def render(user):
     st.subheader("Module 2: Design Approval & Proofing Desk")
@@ -202,6 +240,20 @@ def render(user):
             letter-spacing: 0.3px;
             text-transform: uppercase;
         }
+        /* Clean text link style for clickable Job No */
+        div[data-testid="column"]:nth-of-type(2) button {
+            border: none !important;
+            background: transparent !important;
+            color: #0284c7 !important;
+            font-weight: 700 !important;
+            font-size: 13px !important;
+            text-decoration: underline !important;
+            padding: 4px 0 !important;
+            text-align: left !important;
+        }
+        div[data-testid="column"]:nth-of-type(2) button:hover {
+            color: #0369a1 !important;
+        }
         </style>
     """, unsafe_allow_html=True)
 
@@ -238,7 +290,8 @@ def render(user):
             st.checkbox(" ", key=f"des_chk_{jid}", label_visibility="collapsed")
 
         with r_no:
-            st.markdown(f"<div class='tbl-cell-text' style='font-weight: 700 !important;'>JOB-{job_no}</div>", unsafe_allow_html=True)
+            if st.button(f"JOB-{job_no}", key=f"btn_open_modal_{jid}", type="secondary", use_container_width=True):
+                show_jobsheet_spec_modal(j)
 
         with r_date:
             st.markdown(f"<div class='tbl-cell-text'>{created_date}</div>", unsafe_allow_html=True)
