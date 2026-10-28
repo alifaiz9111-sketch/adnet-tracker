@@ -114,6 +114,8 @@ def render(user):
         """, unsafe_allow_html=True)
 
         suggested_no = get_next_job_no()
+        if "s_manual_job_no" not in st.session_state:
+            st.session_state["s_manual_job_no"] = str(suggested_no)
 
         if "sales_items" not in st.session_state:
             st.session_state.sales_items = [{
@@ -176,10 +178,9 @@ def render(user):
                     is_gst = "GST Invoice" in billing_choice
                 with r1_c2:
                     st.text_input(
-                        "Jobsheet Number (Auto-Generated) *",
-                        value=f"#{suggested_no}",
-                        disabled=True,
-                        key="s_job_no_disp"
+                        "Jobsheet Number *",
+                        key="s_manual_job_no",
+                        placeholder="e.g. 1081"
                     )
 
                 # Row 2: Billing Address (Left) & Target Delivery Date / Routing Workflow Target (Right)
@@ -419,7 +420,8 @@ def render(user):
                     submit_clicked = st.button("Submit & Dispatch Jobsheet", type="primary", use_container_width=True)
 
             if submit_clicked:
-                clean_job_no = manual_job_no.lstrip("#").strip() if manual_job_no else get_next_job_no()[cite: 1]
+                raw_input = st.session_state.get("s_manual_job_no", "").strip()
+                clean_job_no = raw_input.lstrip("#").strip() if raw_input else str(get_next_job_no())
                 c_name = str(client_name).strip() if client_name else ""
                 c_person = str(contact_person).strip() if contact_person else "Direct Client"
                 c_phone = str(contact_phone).strip() if contact_phone else "N/A"
@@ -491,6 +493,7 @@ def render(user):
                             "specifications": "",
                             "delivery_address": "",
                         }]
+                        st.session_state["s_manual_job_no"] = str(get_next_job_no())
                         st.rerun()
                     else:
                         st.error(f"Failed to create jobsheet: {msg}")
