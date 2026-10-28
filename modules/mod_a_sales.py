@@ -419,12 +419,14 @@ def render(user):
                     submit_clicked = st.button("Submit & Dispatch Jobsheet", type="primary", use_container_width=True)
 
             if submit_clicked:
-                universal_job_no = get_next_job_no()
+                clean_job_no = manual_job_no.lstrip("#").strip() if manual_job_no else get_next_job_no()[cite: 1]
                 c_name = str(client_name).strip() if client_name else ""
                 c_person = str(contact_person).strip() if contact_person else "Direct Client"
                 c_phone = str(contact_phone).strip() if contact_phone else "N/A"
 
-                if not c_name:
+                if not clean_job_no:
+                    st.error("Please provide a valid Jobsheet Number.")
+                elif not c_name:
                     st.error("Please fill in mandatory field: Client / Corporate Entity")
                 elif is_gst and (not gstin or len(gstin) < 15):
                     st.error("Please provide a valid 15-character GSTIN for GST Tax Invoices.")
@@ -434,7 +436,7 @@ def render(user):
                     st.error("Please ensure every added line item has a valid name.")
                 else:
                     header_payload = {
-                        "job_no": universal_job_no,
+                        "job_no": clean_job_no,
                         "client_name": c_name,
                         "contact_person": c_person,
                         "contact_phone": c_phone,
@@ -476,7 +478,7 @@ def render(user):
                             pass
 
                         des_msg = f" (Assigned to: `{target_designer}`)" if routed_desk == "DESIGN" else ""
-                        st.success(f"Job Sheet #{universal_job_no} created successfully and routed to `{routed_desk}`{des_msg}!")
+                        st.success(f"Job Sheet #{clean_job_no} created successfully and routed to `{routed_desk}`{des_msg}!")
                         st.session_state.sales_items = [{
                             "item_name": "",
                             "length": 1.0,
