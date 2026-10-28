@@ -434,6 +434,13 @@ def render(user):
             "SETTLED": "pill-settled"
         }
 
+        # Callback to safely reset filter states before widgets re-instantiate
+        def _reset_sales_filters():
+            st.session_state["sales_search_kw"] = ""
+            st.session_state["sales_floor_filter"] = "All Statuses"
+            st.session_state["sales_sort_filter"] = "Recent Jobs (Newest First)"
+            st.session_state["sales_page_num"] = 1
+
         # Top Filter Bar
         with st.container(border=True):
             f1, f2, f3, f4 = st.columns([2.5, 2.5, 2.5, 1.5])
@@ -454,11 +461,13 @@ def render(user):
                 )
             with f4:
                 st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                if st.button("Reset Filters", type="secondary", use_container_width=True, key="sales_reset_btn"):
-                    st.session_state.sales_search_kw = ""
-                    st.session_state.sales_floor_filter = "All Statuses"
-                    st.session_state.sales_sort_filter = "Recent Jobs (Newest First)"
-                    st.rerun()
+                st.button(
+                    "Reset Filters",
+                    type="secondary",
+                    use_container_width=True,
+                    key="sales_reset_btn",
+                    on_click=_reset_sales_filters
+                )
 
         # Filter Logic
         filtered_jobs = []
