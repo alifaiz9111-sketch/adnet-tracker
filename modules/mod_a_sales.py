@@ -518,18 +518,17 @@ def render(user):
         # Top Bar: Record Counter & Conditional Bulk Delete Button
         bar_col1, bar_col2 = st.columns([7, 3])
         with bar_col1:
-            st.caption(f"Showing **{start_idx + 1 if total_records else 0} to {end_idx}** of **{total_records}** records")[cite: 32]
+            st.caption(f"Showing **{start_idx + 1 if total_records else 0} to {end_idx}** of **{total_records}** records")
         with bar_col2:
             if selected_job_ids:
                 with st.popover(f"Delete Selected ({len(selected_job_ids)})", use_container_width=True):
                     st.warning(f"Permanently delete {len(selected_job_ids)} selected job(s)?")
                     if st.button("Confirm Bulk Delete", type="primary", use_container_width=True, key="btn_bulk_del_confirm"):
                         for del_jid in selected_job_ids:
-                            delete_job_sheet(del_jid)[cite: 28]
-                            # Clean up checkbox session state
+                            delete_job_sheet(del_jid)
                             if f"tbl_chk_{del_jid}" in st.session_state:
                                 del st.session_state[f"tbl_chk_{del_jid}"]
-                        log_audit(user["user_id"], "BULK_DELETE", f"Deleted jobs: {selected_job_ids}")[cite: 28]
+                        log_audit(user["user_id"], "BULK_DELETE", f"Deleted jobs: {selected_job_ids}")
                         st.success(f"{len(selected_job_ids)} job(s) deleted successfully.")
                         st.rerun()
 
