@@ -9,6 +9,7 @@ from database import (
     update_user_password,
     get_station_pending_counts
 )
+import importlib
 from modules import (
     mod_a_sales,
     mod_b_design,
@@ -22,6 +23,7 @@ from modules import (
     customer_dashboard,
     ceo_admin
 )
+importlib.reload(mod_a_sales)
 
 _base_dir = os.path.dirname(os.path.abspath(__file__))
 _candidate_favicons = [
