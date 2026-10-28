@@ -42,14 +42,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Initialize Session State
+# I# Initialize Session State
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "user" not in st.session_state:
     st.session_state.user = None
 
 
- def inject_custom_css():
+def inject_custom_css():
     """Injects CSS for blinking badges, queue counter boxes, and AdNet Table UI."""
     st.markdown("""
         <style>
