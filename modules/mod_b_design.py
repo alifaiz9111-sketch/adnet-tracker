@@ -61,13 +61,8 @@ def render(user):
             ).strip().lower()
 
         with f2:
-            all_designers = sorted(list({
-                str(j.get("assigned_designer")).strip()
-                for j in all_design_jobs
-                if j.get("assigned_designer") and j.get("assigned_designer") != "OPEN_POOL"
-            }))
-            designer_opts = ["All Designers", "Unassigned (Open Pool)"] + all_designers
-            sel_designer = st.selectbox("Assigned Artist", options=designer_opts, key="des_designer_filter")
+            designer_opts = ["Mine", "Open Pool", "Return"]
+            sel_designer = st.selectbox("Assigned", options=designer_opts, index=0, key="des_designer_filter")
 
         with f3:
             sort_order = st.selectbox(
@@ -90,12 +85,16 @@ def render(user):
     filtered_jobs = []
     for j in display_jobs_source:
         designer_assigned = str(j.get("assigned_designer") or "").strip()
+        is_returned = bool(j.get("is_returned", False))
 
-        if sel_designer == "Unassigned (Open Pool)":
-            if designer_assigned and designer_assigned != "OPEN_POOL":
+        if sel_designer == "Mine":
+            if is_returned or designer_assigned.lower() != user["full_name"].strip().lower():
                 continue
-        elif sel_designer != "All Designers":
-            if designer_assigned != sel_designer:
+        elif sel_designer == "Open Pool":
+            if is_returned or (designer_assigned and designer_assigned != "OPEN_POOL"):
+                continue
+        elif sel_designer == "Return":
+            if not is_returned:
                 continue
 
         if search_kw:
