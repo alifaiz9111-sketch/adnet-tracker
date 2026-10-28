@@ -626,7 +626,7 @@ def render(user):
 
                 with r_prog:
                     st.markdown(
-                        f"<div class='adnet-progress-circle-red' style='background: conic-gradient(#13b0b3 {pct}%, #e2e8f0 0); border: 2px solid #ffffff;'>"
+                        f"<div class='adnet-progress-circle-red' style='background: conic-gradient(#13b0b3 {pct}%, #13b0b3 0); border: 2px solid #ffffff;'>"
                         f"<div style='background: #ffffff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #BE123C; font-size: 10px; font-weight: 700;'>"
                         f"{pct}%</div></div>",
                         unsafe_allow_html=True
