@@ -6,9 +6,11 @@ from database import (
     get_next_job_no,
     get_user_created_jobs,
     update_job_sheet_by_management,
-    request_job_deletion,
+    delete_job_sheet,
     get_all_designers,
     approve_and_forward_job,
+    log_audit,
+    supabase,
 )
 
 
@@ -53,18 +55,17 @@ def _recalc_on_dim_change(idx):
 
 
 def render(user):
-    st.subheader("📝 Module 1: Order Intake & Commercial Jobsheet Creation")
+    st.subheader("Module 1: Order Intake & Commercial Jobsheet Creation")
     st.caption(
         f"Sales Representative: **{user['full_name']}** | Code: `{user.get('emp_code', 'N/A')}` | Role: `{user.get('account_type')}`"
     )
 
-    user_perms = user.get("permissions") or []
     is_management = user.get("account_type") in ["SUPER_ADMIN", "CEO", "MANAGER"]
-    can_edit_jobsheets = is_management or ("CAN_EDIT_JOBS" in user_perms)
+    t_create, t_history = st.tabs(["Create New Jobsheet", "Order History & Modifications"])
 
-    t_create, t_history = st.tabs(["➕ Create New Jobsheet", "📋 Order History & Modifications"])
-
-    # --- TAB 1: CREATE NEW JOBSHEET ---
+    # =========================================================
+    # TAB 1: CREATE NEW JOBSHEET
+    # =========================================================
     with t_create:
         suggested_no = get_next_job_no()
 
@@ -106,7 +107,6 @@ def render(user):
 
             c1, c2, c3 = st.columns(3)
             with c1:
-                # Locked input to preserve universal sequence
                 st.text_input(
                     "Jobsheet Number (Auto-Generated) *",
                     value=f"#{suggested_no}",
@@ -139,9 +139,9 @@ def render(user):
                     "Routing Workflow Target *",
                     options=["DESIGN", "PAYMENT", "PRODUCTION"],
                     format_func=lambda x: {
-                        "DESIGN": "🎨 Send to Design & Proofs",
-                        "PAYMENT": "💳 Direct to Accounts / Advance",
-                        "PRODUCTION": "⚙️ Skip to Production Floor",
+                        "DESIGN": "Send to Design & Proofs",
+                        "PAYMENT": "Direct to Accounts / Advance",
+                        "PRODUCTION": "Skip to Production Floor",
                     }.get(x, x),
                     key="s_route",
                 )
@@ -150,7 +150,7 @@ def render(user):
             place_of_supply = "19 - West Bengal"
 
             if is_gst:
-                st.markdown("##### 🏛️ GST Compliance Information")
+                st.markdown("##### GST Compliance Information")
                 gc1, gc2 = st.columns([1, 1])
                 with gc1:
                     gstin = st.text_input(
@@ -177,11 +177,11 @@ def render(user):
             target_designer = "OPEN_POOL"
             if routed_desk == "DESIGN":
                 designers_list = get_all_designers()
-                des_options = ["📢 Broadcast to All Designers (Open Claim)"] + [
+                des_options = ["Broadcast to All Designers (Open Claim)"] + [
                     f"{d['full_name']} (@{d['username']})" for d in designers_list
                 ]
                 chosen = st.selectbox("Assign Designer *", options=des_options, key="s_des_choice")
-                if "📢" not in chosen:
+                if "Broadcast" not in chosen:
                     target_designer = chosen.split(" (@")[0].strip()
 
         st.markdown("---")
@@ -189,7 +189,7 @@ def render(user):
 
         btn_col1, _ = st.columns([1, 4])
         with btn_col1:
-            if st.button("➕ Add Item Row", use_container_width=True):
+            if st.button("Add Item Row", use_container_width=True):
                 st.session_state.sales_items.append({
                     "item_name": "",
                     "length": 1.0,
@@ -217,10 +217,10 @@ def render(user):
                     )
                 with top_c2:
                     if len(st.session_state.sales_items) > 1:
-                        if st.button("🗑️", key=f"del_row_{idx}"):
+                        if st.button("X", key=f"del_row_{idx}"):
                             rows_to_remove.append(idx)
 
-                st.caption("📐 **Sizes / Dimensions** (Default: 1 × 1 × 1):")
+                st.caption("Sizes / Dimensions (Default: 1 x 1 x 1):")
                 s_c1, s_c2, s_c3, s_c4 = st.columns(4)
                 with s_c1:
                     item["length"] = st.number_input(
@@ -263,7 +263,7 @@ def render(user):
                         key=f"item_dunit_{idx}",
                     )
 
-                st.caption("💰 **Commercials** (Fill any 2 fields to auto-calculate the 3rd):")
+                st.caption("Commercials (Fill any 2 fields to auto-calculate the 3rd):")
                 r_c1, r_c2, r_c3 = st.columns(3)
                 with r_c1:
                     item["quantity"] = st.number_input(
@@ -277,7 +277,7 @@ def render(user):
                     )
                 with r_c2:
                     item["rate"] = st.number_input(
-                        "Rate (₹)",
+                        "Rate (INR)",
                         min_value=0.0,
                         value=float(item.get("rate", 0.0)),
                         step=10.0,
@@ -287,7 +287,7 @@ def render(user):
                     )
                 with r_c3:
                     item["amount"] = st.number_input(
-                        "Total Amount (₹)",
+                        "Total Amount (INR)",
                         min_value=0.0,
                         value=float(item.get("amount", 0.0)),
                         step=50.0,
@@ -318,10 +318,9 @@ def render(user):
             st.rerun()
 
         grand_total = sum(float(it.get("amount", 0.0)) for it in st.session_state.sales_items)
-        st.markdown(f"### Grand Total Order Value: `₹ {grand_total:,.2f}`")
+        st.markdown(f"### Grand Total Order Value: `INR {grand_total:,.2f}`")
 
-        if st.button("🚀 Submit & Dispatch Jobsheet", type="primary", use_container_width=True):
-            # Atomic universal next job sheet sequence
+        if st.button("Submit & Dispatch Jobsheet", type="primary", use_container_width=True):
             universal_job_no = get_next_job_no()
             c_name = str(client_name).strip() if client_name else ""
             c_person = str(contact_person).strip() if contact_person else "Direct Client"
@@ -372,16 +371,11 @@ def render(user):
 
                 ok, msg = create_job_sheet(header_payload, prepared_items)
                 if ok:
-                    # Automatically send alert email to CEO
                     try:
                         from email_service import send_new_jobsheet_alert
-                        mail_ok, mail_info = send_new_jobsheet_alert(header_payload, prepared_items)
-                        if mail_ok:
-                            st.toast("📧 Notification email dispatched to CEO!", icon="✅")
-                        else:
-                            st.toast(f"⚠️ Email dispatch notice: {mail_info}", icon="⚠️")
-                    except Exception as err:
-                        st.toast(f"⚠️ Email could not be sent: {err}", icon="⚠️")
+                        send_new_jobsheet_alert(header_payload, prepared_items)
+                    except Exception:
+                        pass
 
                     des_msg = f" (Assigned to: `{target_designer}`)" if routed_desk == "DESIGN" else ""
                     st.success(f"Job Sheet #{universal_job_no} created successfully and routed to `{routed_desk}`{des_msg}!")
@@ -401,11 +395,12 @@ def render(user):
                 else:
                     st.error(f"Failed to create jobsheet: {msg}")
 
-    # --- TAB 2: ORDER HISTORY & MODIFICATIONS (15-ROW PAGINATED TABLE) ---
+    # =========================================================
+    # TAB 2: ORDER HISTORY & MODIFICATIONS (15-ROW PAGINATED TABLE)
+    # =========================================================
     with t_history:
         my_jobs = get_user_created_jobs(user["full_name"], is_management=is_management) or []
 
-        # Floor name and stage mapping
         floor_names = {
             "DESIGN": "Design Desk",
             "PAYMENT": "Accounts Desk",
@@ -439,7 +434,7 @@ def render(user):
             "SETTLED": "pill-settled"
         }
 
-        # --- Top Filter & Search Controls Bar ---
+        # Top Filter Bar
         with st.container(border=True):
             f1, f2, f3, f4 = st.columns([2.5, 2.5, 2.5, 1.5])
             with f1:
@@ -465,7 +460,7 @@ def render(user):
                     st.session_state.sales_sort_filter = "Recent Jobs (Newest First)"
                     st.rerun()
 
-        # Apply Filters
+        # Filter Logic
         filtered_jobs = []
         for j in my_jobs:
             stg = j.get("current_stage", "DESIGN")
@@ -481,7 +476,7 @@ def render(user):
 
             filtered_jobs.append(j)
 
-        # Apply Sorting
+        # Sorting Logic
         if sort_order == "Recent Jobs (Newest First)":
             filtered_jobs.sort(key=lambda x: x.get("job_id", 0), reverse=True)
         elif sort_order == "Oldest Jobs":
@@ -489,7 +484,7 @@ def render(user):
         elif sort_order == "Delivery Due Soonest":
             filtered_jobs.sort(key=lambda x: str(x.get("due_date", "9999-99-99")))
 
-        # --- Pagination Setup (Fixed 15 Rows Per Page) ---
+        # Fixed 15 Rows Per Page
         ROWS_PER_PAGE = 15
         total_records = len(filtered_jobs)
         total_pages = max(1, (total_records + ROWS_PER_PAGE - 1) // ROWS_PER_PAGE)
@@ -510,24 +505,60 @@ def render(user):
         if not page_records:
             st.info("No matching job orders found.")
         else:
-            # --- Table Top Heading Bar (Exact Requested Columns) ---
+            # Shared Typography Styles
             st.markdown("""
-                <div class="adnet-table-header">
-                    <div style="display: grid; grid-template-columns: 0.4fr 1.2fr 1.1fr 1.8fr 1.8fr 1.3fr 1fr 1.6fr 2fr; align-items: center; gap: 8px;">
-                        <div>[ ]</div>
-                        <div>Job No.</div>
-                        <div>Date</div>
-                        <div>Client</div>
-                        <div>Contact</div>
-                        <div>Delivery Date</div>
-                        <div style="text-align: center;">Progress</div>
-                        <div style="text-align: center;">Status</div>
-                        <div style="text-align: right; padding-right: 6px;">Action</div>
+                <style>
+                .tbl-cell-text {
+                    font-size: 13px !important;
+                    font-family: inherit !important;
+                    color: #1e293b !important;
+                    font-weight: 500 !important;
+                    line-height: 1.4 !important;
+                    padding-top: 8px;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+                .tbl-cell-header {
+                    font-size: 13px !important;
+                    font-family: inherit !important;
+                    font-weight: 700 !important;
+                    color: #475569 !important;
+                    letter-spacing: 0.3px;
+                    text-transform: uppercase;
+                }
+                .adnet-progress-circle-red {
+                    width: 36px;
+                    height: 36px;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 11px;
+                    font-weight: 700;
+                    margin: auto;
+                }
+                </style>
+            """, unsafe_allow_html=True)
+
+            # Table Header Bar
+            st.markdown("""
+                <div class="adnet-table-header" style="padding: 10px 14px;">
+                    <div style="display: grid; grid-template-columns: 0.3fr 1fr 1fr 1.8fr 1.6fr 1.1fr 0.9fr 1.3fr 1.6fr; align-items: center; gap: 8px;">
+                        <div class="tbl-cell-header">[ ]</div>
+                        <div class="tbl-cell-header">Job No.</div>
+                        <div class="tbl-cell-header">Date</div>
+                        <div class="tbl-cell-header">Client</div>
+                        <div class="tbl-cell-header">Contact</div>
+                        <div class="tbl-cell-header">Delivery Date</div>
+                        <div class="tbl-cell-header" style="text-align: center;">Progress</div>
+                        <div class="tbl-cell-header" style="text-align: center;">Status</div>
+                        <div class="tbl-cell-header" style="text-align: center;">Action</div>
                     </div>
                 </div>
             """, unsafe_allow_html=True)
 
-            # --- Table Data Rows ---
+            # Table Rows
             for j in page_records:
                 jid = j["job_id"]
                 job_no = j.get("job_no", str(jid))
@@ -541,49 +572,37 @@ def render(user):
                 pill_style = pill_classes.get(stg, "pill-design")
                 pct = stage_progress.get(stg, 15)
 
-                # Track confirmation state per session
-                confirm_key = f"confirmed_sent_{jid}"
-                has_forwarded = st.session_state.get(confirm_key, False)
-                forwarded_floor_name = st.session_state.get(f"forwarded_floor_{jid}", stg_display)
-
-                r_col_check, r_col_no, r_col_date, r_col_client, r_col_contact, r_col_due, r_col_prog, r_col_stat, r_col_act = st.columns(
-                    [0.4, 1.2, 1.1, 1.8, 1.8, 1.3, 1, 1.6, 2]
+                r_chk, r_no, r_date, r_client, r_contact, r_due, r_prog, r_stat, r_act = st.columns(
+                    [0.3, 1, 1, 1.8, 1.6, 1.1, 0.9, 1.3, 1.6]
                 )
 
-                with r_col_check:
+                with r_chk:
                     st.checkbox(" ", key=f"tbl_chk_{jid}", label_visibility="collapsed")
 
-                with r_col_no:
-                    st.markdown(f"<div style='font-weight: 700; color: #0f172a; padding-top: 6px;'>JOB-{job_no}</div>", unsafe_allow_html=True)
+                with r_no:
+                    st.markdown(f"<div class='tbl-cell-text' style='font-weight: 700 !important;'>JOB-{job_no}</div>", unsafe_allow_html=True)
 
-                with r_col_date:
-                    st.markdown(f"<div style='color: #475569; font-size: 13px; padding-top: 6px;'>{created_date}</div>", unsafe_allow_html=True)
+                with r_date:
+                    st.markdown(f"<div class='tbl-cell-text'>{created_date}</div>", unsafe_allow_html=True)
 
-                with r_col_client:
-                    st.markdown(f"<div style='font-weight: 600; color: #1e293b; padding-top: 6px;'>{client_name}</div>", unsafe_allow_html=True)
+                with r_client:
+                    st.markdown(f"<div class='tbl-cell-text' title='{client_name}'>{client_name}</div>", unsafe_allow_html=True)
 
-                with r_col_contact:
+                with r_contact:
+                    st.markdown(f"<div class='tbl-cell-text' title='{contact_p} ({contact_ph})'>{contact_p} <span style='color:#64748b; font-size:11px;'>({contact_ph})</span></div>", unsafe_allow_html=True)
+
+                with r_due:
+                    st.markdown(f"<div class='tbl-cell-text'>{due_date_str}</div>", unsafe_allow_html=True)
+
+                with r_prog:
                     st.markdown(
-                        f"<div style='font-size: 13px; color: #334155; padding-top: 4px;'>"
-                        f"<div>{contact_p}</div>"
-                        f"<div style='color: #64748b; font-size: 11px;'>{contact_ph}</div>"
-                        f"</div>",
-                        unsafe_allow_html=True
-                    )
-
-                with r_col_due:
-                    st.markdown(f"<div style='font-size: 13px; color: #475569; padding-top: 6px;'>{due_date_str}</div>", unsafe_allow_html=True)
-
-                with r_col_prog:
-                    # Clean circular percentage badge
-                    st.markdown(
-                        f"<div class='progress-circle' style='background: conic-gradient(#0284c7 {pct}%, #e2e8f0 0); border: 2px solid #ffffff;'>"
-                        f"<div style='background: #ffffff; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #0369a1;'>"
+                        f"<div class='adnet-progress-circle-red' style='background: conic-gradient(#E11D48 {pct}%, #e2e8f0 0); border: 2px solid #ffffff;'>"
+                        f"<div style='background: #ffffff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #BE123C; font-size: 10px; font-weight: 700;'>"
                         f"{pct}%</div></div>",
                         unsafe_allow_html=True
                     )
 
-                with r_col_stat:
+                with r_stat:
                     st.markdown(
                         f"<div style='text-align: center; padding-top: 6px;'>"
                         f"<span class='adnet-pill {pill_style}'>{stg_display}</span>"
@@ -591,48 +610,139 @@ def render(user):
                         unsafe_allow_html=True
                     )
 
-                with r_col_act:
-                    if has_forwarded:
-                        st.markdown(
-                            f"<div style='font-size: 12px; font-weight: 600; color: #0f766e; text-align: right; padding-top: 8px;'>"
-                            f"Approved and sent to {forwarded_floor_name}"
-                            f"</div>",
-                            unsafe_allow_html=True
-                        )
-                    else:
-                        act_sub1, act_sub2 = st.columns([1.2, 0.8])
-                        with act_sub1:
-                            if st.button("Approve", key=f"btn_tbl_appr_{jid}", type="primary", use_container_width=True):
-                                ok, msg, next_stg = approve_and_forward_job(
-                                    job_id=jid,
-                                    user_full_name=user["full_name"]
-                                )
-                                if ok:
-                                    nxt_clean = floor_names.get(next_stg, next_stg)
-                                    st.session_state[confirm_key] = True
-                                    st.session_state[f"forwarded_floor_{jid}"] = nxt_clean
-                                    st.rerun()
-                                else:
-                                    st.error(msg)
-                        with act_sub2:
-                            with st.popover("Edit", use_container_width=True):
-                                st.markdown(f"**Quick Edit Job #{job_no}**")
-                                ed_cli = st.text_input("Client", value=client_name, key=f"q_cli_{jid}")
-                                ed_cnt = st.text_input("Contact", value=contact_p, key=f"q_cnt_{jid}")
-                                ed_phn = st.text_input("Phone", value=contact_ph, key=f"q_ph_{jid}")
+                with r_act:
+                    action_choice = st.selectbox(
+                        "Action",
+                        options=["Select Action", "Edit", "Delete"],
+                        index=0,
+                        key=f"act_drp_{jid}",
+                        label_visibility="collapsed"
+                    )
 
-                                if st.button("Save", key=f"q_save_{jid}", type="primary", use_container_width=True):
-                                    supabase.table("jobs").update({
-                                        "client_name": ed_cli.strip(),
-                                        "contact_person": ed_cnt.strip(),
-                                        "contact_phone": ed_phn.strip()
-                                    }).eq("job_id", jid).execute()
-                                    st.success("Updated.")
-                                    st.rerun()
+                    if action_choice == "Delete":
+                        with st.popover(f"Confirm Delete Job #{job_no}", use_container_width=True):
+                            st.warning(f"Are you sure you want to delete Job #{job_no}?")
+                            if st.button("Confirm Delete", key=f"btn_confirm_del_{jid}", type="primary", use_container_width=True):
+                                delete_job_sheet(jid)
+                                log_audit(user["user_id"], "JOB_DELETED", f"Deleted job #{job_no} from Order History")
+                                st.success(f"Job #{job_no} deleted successfully.")
+                                st.rerun()
+
+                    elif action_choice == "Edit":
+                        with st.popover(f"Edit Jobsheet #{job_no}", use_container_width=True):
+                            st.markdown(f"#### Edit Jobsheet #{job_no}")
+                            items = get_job_items(jid)
+
+                            is_currently_gst = j.get("billing_type") == "GST"
+                            ed_billing_choice = st.radio(
+                                "Billing Classification *",
+                                options=["Non-GST Bill", "GST Invoice (B2B Tax Invoice)"],
+                                index=1 if is_currently_gst else 0,
+                                horizontal=True,
+                                key=f"ed_bchoice_{jid}"
+                            )
+                            ed_is_gst = "GST Invoice" in ed_billing_choice
+
+                            ed_client = st.text_input("Client / Corporate Entity *", value=j.get("client_name") or "", key=f"ed_cl_{jid}").strip()
+                            ec1, ec2 = st.columns(2)
+                            with ec1:
+                                ed_contact = st.text_input("Contact Person", value=j.get("contact_person") or "", key=f"ed_cp_{jid}").strip()
+                            with ec2:
+                                ed_phone = st.text_input("Contact Phone", value=j.get("contact_phone") or "", key=f"ed_ph_{jid}").strip()
+
+                            cur_due = date.today()
+                            if j.get("due_date"):
+                                try:
+                                    cur_due = datetime.strptime(str(j.get("due_date")), "%Y-%m-%d").date()
+                                except Exception:
+                                    cur_due = date.today()
+
+                            ed1, ed2 = st.columns(2)
+                            with ed1:
+                                ed_due = st.date_input("Target Delivery Date *", value=cur_due, key=f"ed_due_{jid}")
+                            with ed2:
+                                stage_list = ["DESIGN", "PAYMENT", "PRODUCTION", "QC", "DISPATCH", "BILLING_REVIEW", "SETTLED"]
+                                cur_st_idx = stage_list.index(j.get("current_stage")) if j.get("current_stage") in stage_list else 0
+                                ed_stage = st.selectbox("Routing Stage *", stage_list, index=cur_st_idx, key=f"ed_stg_{jid}")
+
+                            designers_all = get_all_designers()
+                            d_names = ["OPEN_POOL"] + [d["full_name"] for d in designers_all]
+                            cur_des = j.get("assigned_designer") or "OPEN_POOL"
+                            d_idx = d_names.index(cur_des) if cur_des in d_names else 0
+                            ed_designer = st.selectbox("Assigned Designer", options=d_names, index=d_idx, key=f"ed_des_{jid}")
+
+                            ed_gstin = j.get("gstin", "") or ""
+                            ed_baddr = j.get("billing_address", "") or ""
+                            ed_pos = j.get("place_of_supply", "19 - West Bengal") or "19 - West Bengal"
+
+                            if ed_is_gst:
+                                eg1, eg2 = st.columns(2)
+                                with eg1:
+                                    ed_gstin = st.text_input("Client GSTIN *", value=ed_gstin, key=f"ed_gstin_{jid}").strip().upper()
+                                with eg2:
+                                    pos_opts = ["19 - West Bengal", "10 - Bihar", "20 - Jharkhand", "21 - Odisha", "18 - Assam", "07 - Delhi", "27 - Maharashtra", "Other State"]
+                                    pos_idx = pos_opts.index(ed_pos) if ed_pos in pos_opts else 0
+                                    ed_pos = st.selectbox("Place of Supply *", pos_opts, index=pos_idx, key=f"ed_pos_{jid}")
+                                ed_baddr = st.text_input("Billing Address *", value=ed_baddr, key=f"ed_baddr_{jid}").strip()
+
+                            st.markdown("---")
+                            st.markdown("##### Ordered Line Items & Deliverables")
+                            edited_items = []
+                            for idx, it in enumerate(items):
+                                with st.container(border=True):
+                                    st.caption(f"Item #{idx+1}")
+                                    ei_name = st.text_input("Item Name *", value=it.get("item_name", ""), key=f"ei_nm_{jid}_{idx}")
+                                    ei_spec = st.text_input("Specifications / Dimensions", value=it.get("specifications", ""), key=f"ei_sp_{jid}_{idx}")
+                                    
+                                    iq1, iq2, iq3 = st.columns(3)
+                                    with iq1:
+                                        ei_qty = st.number_input("Quantity", value=float(it.get("quantity", 1)), min_value=0.01, step=1.0, key=f"ei_q_{jid}_{idx}")
+                                    with iq2:
+                                        ei_rate = st.number_input("Rate (INR)", value=float(it.get("rate", 0)), min_value=0.0, step=10.0, key=f"ei_r_{jid}_{idx}")
+                                    with iq3:
+                                        ei_amt = round(ei_qty * ei_rate, 2)
+                                        st.metric("Amount", f"INR {ei_amt:,.2f}")
+
+                                    ei_addr = st.text_input("Delivery Destination", value=it.get("delivery_address", ""), key=f"ei_ad_{jid}_{idx}")
+                                    edited_items.append({
+                                        "item_name": ei_name.strip(),
+                                        "specifications": ei_spec.strip(),
+                                        "quantity": ei_qty,
+                                        "unit": it.get("unit", "Pcs"),
+                                        "rate": ei_rate,
+                                        "amount": ei_amt,
+                                        "delivery_address": ei_addr.strip()
+                                    })
+
+                            if st.button("Save Changes", key=f"btn_save_edit_{jid}", type="primary", use_container_width=True):
+                                if not ed_client:
+                                    st.error("Client name is required.")
+                                elif ed_is_gst and (not ed_gstin or len(ed_gstin) < 15):
+                                    st.error("Valid 15-character GSTIN is required for GST invoices.")
+                                else:
+                                    h_payload = {
+                                        "client_name": ed_client,
+                                        "contact_person": ed_contact,
+                                        "contact_phone": ed_phone,
+                                        "due_date": str(ed_due),
+                                        "current_stage": ed_stage,
+                                        "assigned_designer": ed_designer,
+                                        "billing_type": "GST" if ed_is_gst else "NON_GST",
+                                        "gstin": ed_gstin if ed_is_gst else None,
+                                        "billing_address": ed_baddr if ed_is_gst else None,
+                                        "place_of_supply": ed_pos if ed_is_gst else None,
+                                    }
+                                    ok, upd_msg = update_job_sheet_by_management(jid, h_payload, edited_items)
+                                    if ok:
+                                        log_audit(user["user_id"], "JOB_MODIFIED", f"Updated jobsheet #{job_no}")
+                                        st.success("Jobsheet updated successfully.")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Update failed: {upd_msg}")
 
                 st.markdown("<hr style='margin: 4px 0 8px 0; border: none; border-top: 1px solid #edf2f7;' />", unsafe_allow_html=True)
 
-        # --- Pagination Control Bar ---
+        # Pagination Control Bar
         if total_pages > 1:
             st.markdown("<br>", unsafe_allow_html=True)
             p_cols = st.columns([2, 1, 1, 1, 1, 1, 2])
@@ -653,199 +763,3 @@ def render(user):
                 if st.button(">", disabled=(curr_page == total_pages), key="p_next_btn", use_container_width=True):
                     st.session_state.sales_page_num = min(total_pages, curr_page + 1)
                     st.rerun()
-
-        with st.container(border=True):
-            st.markdown("#### 🔍 Filter & Search Orders")
-            
-            st.markdown("""
-                <style>
-                div[data-baseweb="select"] {
-                    background-color: #161B22 !important;
-                    border-radius: 6px !important;
-                }
-                div[data-baseweb="select"] * {
-                    color: #FFFFFF !important;
-                }
-                </style>
-            """, unsafe_allow_html=True)
-
-            jobs_source = my_jobs or []
-
-            opt_job_nos = ["All"] + sorted(list({str(j.get("job_no")) for j in jobs_source if j.get("job_no")}))
-            opt_clients = ["All"] + sorted(list({str(j.get("client_name")).strip() for j in jobs_source if j.get("client_name")}))
-            opt_contacts = ["All"] + sorted(list({str(j.get("contact_person")).strip() for j in jobs_source if j.get("contact_person")}))
-            opt_phones = ["All"] + sorted(list({str(j.get("contact_phone")).strip() for j in jobs_source if j.get("contact_phone")}))
-            opt_due_dates = ["All"] + sorted(list({str(j.get("due_date")) for j in jobs_source if j.get("due_date")}))
-            opt_depts = ["All Departments", "DESIGN", "PAYMENT", "PRODUCTION", "QC", "DISPATCH", "BILLING", "SETTLED"]
-            opt_designers = ["All"] + sorted(list({str(j.get("assigned_designer")).strip() for j in jobs_source if j.get("assigned_designer")}))
-
-            sf_c1, sf_c2, sf_c3 = st.columns(3)
-            with sf_c1:
-                f_job_no = st.selectbox("Jobsheet Number", options=opt_job_nos, index=0, key="sf_drp_jno")
-                f_client = st.selectbox("Client / Corporate Entity", options=opt_clients, index=0, key="sf_drp_cli")
-                f_due_date = st.selectbox("Target Delivery Date", options=opt_due_dates, index=0, key="sf_drp_due")
-
-            with sf_c2:
-                f_contact = st.selectbox("Contact Person", options=opt_contacts, index=0, key="sf_drp_cnt")
-                f_phone = st.selectbox("Mobile / Contact Number", options=opt_phones, index=0, key="sf_drp_phn")
-
-            with sf_c3:
-                f_dept = st.selectbox("Currently in Department", options=opt_depts, index=0, key="sf_drp_dpt")
-                f_designer = st.selectbox("Assigned Designer", options=opt_designers, index=0, key="sf_drp_dsg")
-
-            if st.button("🔄 Reset Filters", type="secondary", key="btn_rst_sf"):
-                for k in ["sf_drp_jno", "sf_drp_cli", "sf_drp_due", "sf_drp_cnt", "sf_drp_phn", "sf_drp_dpt", "sf_drp_dsg"]:
-                    if k in st.session_state:
-                        del st.session_state[k]
-                st.rerun()
-
-        filtered_my_jobs = []
-        for j in (my_jobs or []):
-            if f_job_no != "All" and str(j.get("job_no")) != f_job_no:
-                continue
-            if f_client != "All" and str(j.get("client_name", "")).strip() != f_client:
-                continue
-            if f_contact != "All" and str(j.get("contact_person", "")).strip() != f_contact:
-                continue
-            if f_phone != "All" and str(j.get("contact_phone", "")).strip() != f_phone:
-                continue
-            if f_due_date != "All" and str(j.get("due_date", "")) != f_due_date:
-                continue
-            if f_dept != "All Departments" and j.get("current_stage") != f_dept:
-                continue
-            if f_designer != "All" and str(j.get("assigned_designer", "")).strip() != f_designer:
-                continue
-            filtered_my_jobs.append(j)
-
-        st.caption(f"Showing **{len(filtered_my_jobs)}** matching order(s):")
-        st.markdown("---")
-
-        if not filtered_my_jobs:
-            st.info("No matching orders found.")
-        else:
-            for j in filtered_my_jobs:
-                items = get_job_items(j["job_id"])
-                total_val = sum(float(it.get("amount", 0) or 0) for it in items)
-
-                with st.container(border=True):
-                    c1, c2, c3 = st.columns([2.5, 2, 1.5])
-                    with c1:
-                        btype_badge = "🏛️ GST" if j.get("billing_type") == "GST" else "📄 Non-GST"
-                        st.markdown(f"**Job #{j.get('job_no')} — {j.get('client_name')}** ({btype_badge})")
-                        st.caption(f"Contact: `{j.get('contact_person') or 'N/A'}` | 📱 `{j.get('contact_phone') or 'N/A'}`")
-                        st.caption(f"Due: `{j.get('due_date')}` | Stage: `{j.get('current_stage')}`")
-                        des_label = j.get("assigned_designer") or "None"
-                        st.caption(f"Designer: `{des_label}` | Booked by: `{j.get('order_taken_by', 'N/A')}`")
-                    with c2:
-                        st.markdown(f"**Value:** ₹ {total_val:,.2f}")
-                        for it in items:
-                            st.caption(f"• {it.get('item_name')} ({it.get('quantity')} {it.get('unit')}) — ₹{float(it.get('amount', 0)):,.2f}")
-                    with c3:
-                        is_del_req = (j.get("return_reason") or "").startswith("[DELETION_REQ]")
-
-                        if is_del_req:
-                            st.warning("⏳ Deletion Pending Approval")
-                        elif j.get("is_returned"):
-                            st.error(f"⚠️ Return: {j.get('return_reason')}")
-                        else:
-                            st.info(f"Desk: {j.get('current_stage')}")
-
-                        if can_edit_jobsheets:
-                            with st.popover("✏️ Edit Jobsheet", use_container_width=True):
-                                st.markdown(f"**Modify Job #{j.get('job_no')}**")
-                                ed_client = st.text_input("Client Name", value=j.get("client_name", ""), key=f"ed_cl_{j['job_id']}")
-                                ed_contact = st.text_input("Contact Person", value=j.get("contact_person", ""), key=f"ed_cp_{j['job_id']}")
-                                ed_phone = st.text_input("Contact Phone", value=j.get("contact_phone", ""), key=f"ed_ph_{j['job_id']}")
-
-                                cur_due = date.today()
-                                if j.get("due_date"):
-                                    try:
-                                        cur_due = datetime.strptime(str(j.get("due_date")), "%Y-%m-%d").date()
-                                    except Exception:
-                                        cur_due = date.today()
-                                ed_due = st.date_input("Target Due Date", value=cur_due, key=f"ed_due_{j['job_id']}")
-
-                                stage_list = ["DESIGN", "PAYMENT", "PRODUCTION", "QC", "DISPATCH", "BILLING", "SETTLED"]
-                                cur_st_idx = stage_list.index(j.get("current_stage")) if j.get("current_stage") in stage_list else 0
-                                ed_stage = st.selectbox("Stage Desk", stage_list, index=cur_st_idx, key=f"ed_stg_{j['job_id']}")
-
-                                designers_all = get_all_designers()
-                                d_names = ["OPEN_POOL"] + [d["full_name"] for d in designers_all]
-                                cur_des = j.get("assigned_designer") or "OPEN_POOL"
-                                d_idx = d_names.index(cur_des) if cur_des in d_names else 0
-                                ed_designer = st.selectbox("Assigned Designer", options=d_names, index=d_idx, key=f"ed_des_{j['job_id']}")
-
-                                is_currently_gst = j.get("billing_type") == "GST"
-                                ed_is_gst = st.checkbox("GST Tax Invoice Billing", value=is_currently_gst, key=f"ed_isgst_{j['job_id']}")
-                                ed_gstin = j.get("gstin", "") or ""
-                                ed_baddr = j.get("billing_address", "") or ""
-                                ed_pos = j.get("place_of_supply", "19 - West Bengal") or "19 - West Bengal"
-
-                                if ed_is_gst:
-                                    ed_gstin = st.text_input("Client GSTIN", value=ed_gstin, key=f"ed_gstin_{j['job_id']}").strip().upper()
-                                    ed_baddr = st.text_input("Billing Address", value=ed_baddr, key=f"ed_baddr_{j['job_id']}").strip()
-                                    pos_opts = ["19 - West Bengal", "10 - Bihar", "20 - Jharkhand", "21 - Odisha", "18 - Assam", "07 - Delhi", "27 - Maharashtra", "Other State"]
-                                    pos_idx = pos_opts.index(ed_pos) if ed_pos in pos_opts else 0
-                                    ed_pos = st.selectbox("Place of Supply", pos_opts, index=pos_idx, key=f"ed_pos_{j['job_id']}")
-
-                                st.markdown("---")
-                                st.markdown("##### Line Items")
-                                edited_items = []
-                                for idx, it in enumerate(items):
-                                    st.caption(f"Item #{idx+1}")
-                                    ei_name = st.text_input("Item Name", value=it.get("item_name", ""), key=f"ei_nm_{j['job_id']}_{idx}")
-                                    ei_spec = st.text_input("Specs / Dimensions", value=it.get("specifications", ""), key=f"ei_sp_{j['job_id']}_{idx}")
-                                    ei_qty = st.number_input("Qty", value=float(it.get("quantity", 1)), min_value=0.01, step=1.0, key=f"ei_q_{j['job_id']}_{idx}")
-                                    ei_rate = st.number_input("Rate (₹)", value=float(it.get("rate", 0)), min_value=0.0, step=10.0, key=f"ei_r_{j['job_id']}_{idx}")
-                                    ei_amt = round(ei_qty * ei_rate, 2)
-                                    st.write(f"Line Total: **₹ {ei_amt:,.2f}**")
-                                    edited_items.append({
-                                        "item_name": ei_name.strip(),
-                                        "specifications": ei_spec.strip(),
-                                        "quantity": ei_qty,
-                                        "unit": it.get("unit", "Pcs"),
-                                        "rate": ei_rate,
-                                        "amount": ei_amt,
-                                        "delivery_address": it.get("delivery_address", "")
-                                    })
-
-                                if st.button("Save Changes", key=f"btn_save_job_{j['job_id']}", type="primary", use_container_width=True):
-                                    h_payload = {
-                                        "client_name": ed_client,
-                                        "contact_person": ed_contact,
-                                        "contact_phone": ed_phone,
-                                        "due_date": str(ed_due),
-                                        "current_stage": ed_stage,
-                                        "assigned_designer": ed_designer,
-                                        "billing_type": "GST" if ed_is_gst else "NON_GST",
-                                        "gstin": ed_gstin if ed_is_gst else None,
-                                        "billing_address": ed_baddr if ed_is_gst else None,
-                                        "place_of_supply": ed_pos if ed_is_gst else None,
-                                    }
-                                    ok, upd_msg = update_job_sheet_by_management(j["job_id"], h_payload, edited_items)
-                                    if ok:
-                                        st.success("Jobsheet updated successfully.")
-                                        st.rerun()
-                                    else:
-                                        st.error(f"Update failed: {upd_msg}")
-
-                        if is_del_req:
-                            st.caption("Request is awaiting review in Executive Overview.")
-                        else:
-                            with st.popover("🗑️ Request Deletion", use_container_width=True):
-                                st.caption("Submit deletion request to CEO / Admin for approval.")
-                                del_reason = st.text_input(
-                                    "Reason for Deletion *", 
-                                    placeholder="e.g. Client cancelled order", 
-                                    key=f"req_del_r_{j['job_id']}"
-                                )
-                                if st.button("Submit Request", key=f"btn_req_del_{j['job_id']}", type="primary", use_container_width=True):
-                                    if not del_reason.strip():
-                                        st.error("Please provide a reason.")
-                                    else:
-                                        ok, msg = request_job_deletion(j["job_id"], user["full_name"], del_reason)
-                                        if ok:
-                                            st.success(msg)
-                                            st.rerun()
-                                        else:
-                                            st.error(msg)
