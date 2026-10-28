@@ -1,281 +1,316 @@
 from datetime import date, datetime
 import streamlit as st
-from database import supabase, get_job_items, claim_design_job, reject_job_to_sales
+from database import (
+    supabase,
+    get_job_items,
+    bulk_approve_design_jobs,
+    bulk_reject_design_jobs,
+    reject_job_to_sales,
+    log_audit,
+)
 
 
 def render(user):
-    st.subheader("🎨 Module 2: Design, Proofing & Pre-Press Desk")
+    st.subheader("Module 2: Design Approval & Proofing Desk")
     st.caption(
         f"Graphic Artist / Pre-Press: **{user['full_name']}** | Role: `{user.get('account_type')}`"
     )
 
+    is_privileged = user.get("account_type") in ["SUPER_ADMIN", "CEO", "MANAGER"]
+
+    # 1. Fetch jobs currently at DESIGN stage
     try:
         res = (
             supabase.table("jobs")
             .select("*")
             .eq("current_stage", "DESIGN")
-            .order("job_id")
+            .order("job_id", desc=True)
             .execute()
         )
         all_design_jobs = res.data or []
     except Exception as e:
-        st.error(f"Error fetching design queue: {e}")
+        st.error(f"Error loading design records: {e}")
         return
 
-    is_privileged = user.get("account_type") in ["SUPER_ADMIN", "CEO"]
-
-    # --- MUTUALLY EXCLUSIVE TASK QUEUES ---
-    # 1. Flagged or QC returns
-    qc_returns = [j for j in all_design_jobs if j.get("is_returned")]
-
-    # 2. Open broadcast jobs (not claimed by anyone)
-    open_pool = [
-        j for j in all_design_jobs 
-        if not j.get("is_returned") and (
-            not j.get("assigned_designer") or j.get("assigned_designer") == "OPEN_POOL"
-        )
-    ]
-
-    # 3. Active assigned jobs:
-    # For Admin/CEO: show all assigned jobs that are NOT open pool and NOT returned
-    # For regular designer: show only jobs specifically assigned to them
-    if is_privileged:
-        my_active = [
-            j for j in all_design_jobs 
-            if not j.get("is_returned") and j.get("assigned_designer") and j.get("assigned_designer") != "OPEN_POOL"
+    # If regular designer, show jobs assigned to them, open pool, or flagged returns
+    if not is_privileged:
+        display_jobs_source = [
+            j for j in all_design_jobs
+            if not j.get("assigned_designer")
+            or j.get("assigned_designer") == "OPEN_POOL"
+            or j.get("assigned_designer") == user["full_name"]
         ]
     else:
-        my_active = [
-            j for j in all_design_jobs 
-            if not j.get("is_returned") and j.get("assigned_designer") == user["full_name"]
-        ]
+        display_jobs_source = all_design_jobs
 
-    t_active, t_pool, t_returns, t_hist = st.tabs([
-        f"📌 Active Assigned Desk ({len(my_active)})",
-        f"📢 Open Claim Pool ({len(open_pool)})",
-        f"🚨 QC Returns / Corrections ({len(qc_returns)})",
-        "📜 Design Work History"
-    ])
+    # Callback to reset filters
+    def _reset_design_filters():
+        st.session_state["des_search_kw"] = ""
+        st.session_state["des_designer_filter"] = "All Designers"
+        st.session_state["des_sort_filter"] = "Recent Jobs (Newest First)"
+        st.session_state["des_page_num"] = 1
 
-    def render_job_card(job, mode="active"):
-        items = get_job_items(job["job_id"])
-        assigned_to = job.get("assigned_designer")
-        is_open = not assigned_to or assigned_to == "OPEN_POOL"
-        is_mine = assigned_to == user["full_name"]
+    # --- Top Filter Bar ---
+    with st.container(border=True):
+        f1, f2, f3, f4 = st.columns([3.5, 2.5, 2.5, 1.5])
+        with f1:
+            search_kw = st.text_input(
+                "Search Orders",
+                placeholder="Job No, Client, Contact...",
+                key="des_search_kw"
+            ).strip().lower()
 
-        is_urgent = False
-        if job.get("due_date"):
-            try:
-                due_d = datetime.strptime(str(job["due_date"]), "%Y-%m-%d").date()
-                if (due_d - date.today()).days <= 1:
-                    is_urgent = True
-            except Exception:
-                pass
+        with f2:
+            all_designers = sorted(list({
+                str(j.get("assigned_designer")).strip()
+                for j in all_design_jobs
+                if j.get("assigned_designer") and j.get("assigned_designer") != "OPEN_POOL"
+            }))
+            designer_opts = ["All Designers", "Unassigned (Open Pool)"] + all_designers
+            sel_designer = st.selectbox("Assigned Artist", options=designer_opts, key="des_designer_filter")
 
-        with st.container(border=True):
-            # 1. Job Header Card
-            c_head1, c_head2, c_head3 = st.columns([3, 2, 1.5])
-            with c_head1:
-                st.markdown(f"### Job #{job.get('job_no')} — {job.get('client_name')}")
-                st.caption(f"👤 Contact: `{job.get('contact_person') or 'N/A'}` | 📱 `{job.get('contact_phone') or 'N/A'}`")
-            with c_head2:
-                due_display = f"📅 Target Due: **{job.get('due_date')}**"
-                if is_urgent:
-                    st.error(f"🔥 **URGENT** | {due_display}")
-                else:
-                    st.info(f"⏳ Normal | {due_display}")
-                st.caption(f"Sales Rep: **{job.get('order_taken_by') or 'N/A'}**")
-            with c_head3:
-                if is_open:
-                    st.warning("📢 Unclaimed")
-                else:
-                    st.success(f"🎨 `{assigned_to}`")
+        with f3:
+            sort_order = st.selectbox(
+                "Sort By",
+                options=["Recent Jobs (Newest First)", "Oldest Jobs", "Delivery Due Soonest"],
+                key="des_sort_filter"
+            )
 
-            if job.get("is_returned"):
-                st.error(f"⚠️ **Flagged Issue / Return:** {job.get('return_reason')} (Reported by: {job.get('returned_by', 'Floor')})")
+        with f4:
+            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+            st.button(
+                "Reset Filters",
+                type="secondary",
+                use_container_width=True,
+                key="des_reset_btn",
+                on_click=_reset_design_filters
+            )
 
-            st.markdown("---")
+    # --- Filter Logic ---
+    filtered_jobs = []
+    for j in display_jobs_source:
+        designer_assigned = str(j.get("assigned_designer") or "").strip()
 
-            # 2. Pre-Press Spec Viewer & Commercial Masking
-            c_specs, c_actions = st.columns([4, 2])
-            with c_specs:
-                st.markdown("##### 📐 Pre-Press Production Specifications")
-                for idx, it in enumerate(items, 1):
-                    with st.container():
-                        st.markdown(f"**{idx}. {it.get('item_name')}** — `Qty: {it.get('quantity')} {it.get('unit')}`")
-                        raw_spec = it.get("specifications") or "No technical notes entered."
-                        st.code(raw_spec, language="markdown")
+        if sel_designer == "Unassigned (Open Pool)":
+            if designer_assigned and designer_assigned != "OPEN_POOL":
+                continue
+        elif sel_designer != "All Designers":
+            if designer_assigned != sel_designer:
+                continue
 
-            with c_actions:
-                if is_privileged:
-                    total_val = sum(float(it.get("amount", 0) or 0) for it in items)
-                    st.metric("Total Order Value", f"₹ {total_val:,.2f}")
-                else:
-                    st.caption("🔒 *Commercial pricing masked for Pre-Press.*")
+        if search_kw:
+            comb = f"{j.get('job_no', '')} {j.get('client_name', '')} {j.get('contact_person', '')} {j.get('contact_phone', '')}".lower()
+            if search_kw not in comb:
+                continue
 
-                st.markdown("<br>", unsafe_allow_html=True)
+        filtered_jobs.append(j)
 
-                # 3. Action & Routing Controls with Unique Keys per Tab Mode
-                if is_open and not is_privileged:
-                    if st.button("✋ Claim Job", key=f"btn_claim_{mode}_{job['job_id']}", type="primary", use_container_width=True):
-                        ok, msg = claim_design_job(job["job_id"], user["full_name"])
+    # --- Sorting Logic ---
+    if sort_order == "Recent Jobs (Newest First)":
+        filtered_jobs.sort(key=lambda x: x.get("job_id", 0), reverse=True)
+    elif sort_order == "Oldest Jobs":
+        filtered_jobs.sort(key=lambda x: x.get("job_id", 0))
+    elif sort_order == "Delivery Due Soonest":
+        filtered_jobs.sort(key=lambda x: str(x.get("due_date", "9999-99-99")))
+
+    # --- 15-Row Pagination ---
+    ROWS_PER_PAGE = 15
+    total_records = len(filtered_jobs)
+    total_pages = max(1, (total_records + ROWS_PER_PAGE - 1) // ROWS_PER_PAGE)
+
+    if "des_page_num" not in st.session_state:
+        st.session_state.des_page_num = 1
+
+    if st.session_state.des_page_num > total_pages:
+        st.session_state.des_page_num = total_pages
+
+    curr_page = st.session_state.des_page_num
+    start_idx = (curr_page - 1) * ROWS_PER_PAGE
+    end_idx = min(start_idx + ROWS_PER_PAGE, total_records)
+    page_records = filtered_jobs[start_idx:end_idx]
+
+    # Selected rows on active page
+    selected_job_ids = [
+        j["job_id"] for j in page_records
+        if st.session_state.get(f"des_chk_{j['job_id']}", False)
+    ]
+
+    # --- Top Bar: Counter & Bulk Action Triggers ---
+    tbar1, tbar2 = st.columns([5, 5])
+    with tbar1:
+        st.caption(f"Showing **{start_idx + 1 if total_records else 0} to {end_idx}** of **{total_records}** design orders")
+
+    with tbar2:
+        if selected_job_ids:
+            b_col_app, b_col_ret = st.columns(2)
+
+            with b_col_app:
+                with st.popover(f"Bulk Approve ({len(selected_job_ids)})", use_container_width=True):
+                    st.markdown(f"**Approve {len(selected_job_ids)} Order(s)?**")
+                    st.caption("Pushes all selected orders forward to Accounts Clearance (PAYMENT).")
+                    if st.button("Confirm Bulk Approval", type="primary", use_container_width=True, key="btn_confirm_bulk_app"):
+                        ok, msg = bulk_approve_design_jobs(selected_job_ids, user["full_name"])
                         if ok:
-                            st.success("Job locked to your desk.")
+                            for jid in selected_job_ids:
+                                if f"des_chk_{jid}" in st.session_state:
+                                    del st.session_state[f"des_chk_{jid}"]
+                            st.success(msg)
                             st.rerun()
                         else:
                             st.error(msg)
-                
-                elif is_mine or is_privileged or mode == "return":
-                    # Approved Button
-                    if st.button("✅ Approved", key=f"btn_app_{mode}_{job['job_id']}", type="primary", use_container_width=True):
-                        try:
-                            update_data = {
-                                "current_stage": "PAYMENT",
-                                "is_returned": False,
-                                "return_reason": None
-                            }
-                            if is_open and is_privileged:
-                                update_data["assigned_designer"] = user["full_name"]
 
-                            supabase.table("jobs").update(update_data).eq("job_id", int(job["job_id"])).execute()
-                            st.success(f"Job #{job.get('job_no')} approved and pushed to Accounts (PAYMENT).")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Approval failed: {e}")
-
-                    # Flag Spec Issue Popover
-                    with st.popover("⚠️ Flag Spec Issue", use_container_width=True):
-                        st.caption("Send revision request back to Sales intake.")
-                        issue_note = st.text_input("Discrepancy Details *", key=f"iss_{mode}_{job['job_id']}")
-                        if st.button("Submit Issue to Sales", key=f"btn_flag_{mode}_{job['job_id']}", type="secondary", use_container_width=True):
-                            if not issue_note.strip():
-                                st.error("Please enter specific discrepancy details.")
+            with b_col_ret:
+                with st.popover(f"Bulk Send to Sales ({len(selected_job_ids)})", use_container_width=True):
+                    st.markdown(f"**Send {len(selected_job_ids)} Order(s) back to Sales?**")
+                    bulk_reason = st.text_input("Discrepancy Reason *", placeholder="e.g. Dimensions missing, low resolution file", key="bulk_spec_reason")
+                    if st.button("Confirm Bulk Return", type="primary", use_container_width=True, key="btn_confirm_bulk_ret"):
+                        if not bulk_reason.strip():
+                            st.error("Please provide a reason before returning.")
+                        else:
+                            ok, msg = bulk_reject_design_jobs(selected_job_ids, user["full_name"], bulk_reason.strip())
+                            if ok:
+                                for jid in selected_job_ids:
+                                    if f"des_chk_{jid}" in st.session_state:
+                                        del st.session_state[f"des_chk_{jid}"]
+                                st.warning(msg)
+                                st.rerun()
                             else:
-                                ok, flag_msg = reject_job_to_sales(job["job_id"], user["full_name"], issue_note)
-                                if ok:
-                                    st.warning(flag_msg)
-                                    st.rerun()
-                                else:
-                                    st.error(flag_msg)
-                else:
-                    st.caption(f"🔒 Locked to {assigned_to}")
+                                st.error(msg)
 
-    # Render tabs
-    with t_active:
-        if not my_active:
-            st.info("No active design jobs assigned.")
-        else:
-            for j in my_active:
-                render_job_card(j, mode="active")
+    if not page_records:
+        st.info("No matching design approval orders found.")
+        return
 
-    with t_pool:
-        if not open_pool:
-            st.info("Open claim pool is clear. No unassigned broadcasts.")
-        else:
-            for j in open_pool:
-                render_job_card(j, mode="pool")
+    # --- Typography CSS ---
+    st.markdown("""
+        <style>
+        .tbl-cell-text {
+            font-size: 13px !important;
+            font-family: inherit !important;
+            color: #1e293b !important;
+            font-weight: 500 !important;
+            line-height: 1.4 !important;
+            padding-top: 8px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .tbl-cell-header {
+            font-size: 13px !important;
+            font-family: inherit !important;
+            font-weight: 700 !important;
+            color: #475569 !important;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
-    with t_returns:
-        if not qc_returns:
-            st.success("No returned or flagged spec issues pending correction.")
-        else:
-            for j in qc_returns:
-                render_job_card(j, mode="return")
+    # --- Table Header Bar (Blank for tick mark, Job No., Date, Client, Contact, Delivery Date, Action) ---
+    st.markdown("""
+        <div class="adnet-table-header" style="padding: 10px 14px;">
+            <div style="display: grid; grid-template-columns: 0.3fr 1.1fr 1.1fr 2.3fr 2.1fr 1.3fr 1.8fr; align-items: center; gap: 8px;">
+                <div class="tbl-cell-header">&nbsp;</div>
+                <div class="tbl-cell-header">Job No.</div>
+                <div class="tbl-cell-header">Date</div>
+                <div class="tbl-cell-header">Client</div>
+                <div class="tbl-cell-header">Contact</div>
+                <div class="tbl-cell-header">Delivery Date</div>
+                <div class="tbl-cell-header" style="text-align: center;">Action</div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
 
-    with t_hist:
-        st.markdown("#### 📜 Archive: Completed & Ongoing Design Work")
+    # --- Table Data Rows ---
+    for j in page_records:
+        jid = j["job_id"]
+        job_no = j.get("job_no", str(jid))
+        created_date = str(j.get("created_at", ""))[:10] or "N/A"
+        client_name = j.get("client_name") or "N/A"
+        contact_p = j.get("contact_person") or "N/A"
+        contact_ph = j.get("contact_phone") or "N/A"
+        due_date_str = str(j.get("due_date") or "N/A")
 
-        # Fetch all jobs that have ever had a designer assigned, sorted latest first by date & time
-        try:
-            h_res = (
-                supabase.table("jobs")
-                .select("*")
-                .not_.is_("assigned_designer", "null")
-                .order("created_at", desc=True)
-                .execute()
-            )
-            raw_history_jobs = h_res.data or []
-        except Exception as e:
-            st.error(f"Error loading design history: {e}")
-            raw_history_jobs = []
+        r_chk, r_no, r_date, r_client, r_contact, r_due, r_act = st.columns(
+            [0.3, 1.1, 1.1, 2.3, 2.1, 1.3, 1.8]
+        )
 
-        is_elevated = user.get("account_type") in ["SUPER_ADMIN", "CEO", "MANAGER"]
+        with r_chk:
+            st.checkbox(" ", key=f"des_chk_{jid}", label_visibility="collapsed")
 
-        # Dropdown filtering for Admin, Manager, and CEO
-        if is_elevated:
-            all_designer_names = sorted(list({
-                str(j.get("assigned_designer")).strip()
-                for j in raw_history_jobs
-                if j.get("assigned_designer") and j.get("assigned_designer") != "OPEN_POOL"
-            }))
-            filter_options = ["All Designers"] + all_designer_names
+        with r_no:
+            st.markdown(f"<div class='tbl-cell-text' style='font-weight: 700 !important;'>JOB-{job_no}</div>", unsafe_allow_html=True)
 
-            selected_designer = st.selectbox(
-                "Filter by Designer",
-                options=filter_options,
+        with r_date:
+            st.markdown(f"<div class='tbl-cell-text'>{created_date}</div>", unsafe_allow_html=True)
+
+        with r_client:
+            st.markdown(f"<div class='tbl-cell-text' title='{client_name}'>{client_name}</div>", unsafe_allow_html=True)
+
+        with r_contact:
+            st.markdown(f"<div class='tbl-cell-text' title='{contact_p} ({contact_ph})'>{contact_p} <span style='color:#64748b; font-size:11px;'>({contact_ph})</span></div>", unsafe_allow_html=True)
+
+        with r_due:
+            st.markdown(f"<div class='tbl-cell-text'>{due_date_str}</div>", unsafe_allow_html=True)
+
+        with r_act:
+            action_choice = st.selectbox(
+                "Action",
+                options=["  ", "Approved", "Send to Sales"],
                 index=0,
-                key="des_hist_filter_dropdown"
+                key=f"des_act_drp_{jid}",
+                label_visibility="collapsed"
             )
 
-            if selected_designer == "All Designers":
-                filtered_history = raw_history_jobs
-            else:
-                filtered_history = [
-                    j for j in raw_history_jobs
-                    if str(j.get("assigned_designer", "")).strip() == selected_designer
-                ]
-        else:
-            # Regular designer sees only their completed/active design work
-            filtered_history = [
-                j for j in raw_history_jobs
-                if str(j.get("assigned_designer", "")).strip().lower() == user["full_name"].lower()
-            ]
-
-        st.caption(f"Showing **{len(filtered_history)}** design record(s) sorted by latest date and time:")
-        st.markdown("---")
-
-        if not filtered_history:
-            st.info("No design work records found matching the criteria.")
-        else:
-            for job in filtered_history:
-                jid = job["job_id"]
-                items = get_job_items(jid)
-                stage = job.get("current_stage", "DESIGN")
-                is_ret = job.get("is_returned", False)
-
-                # Format created timestamp
-                created_dt = str(job.get("created_at", ""))[:19].replace("T", " ")
-
-                with st.container(border=True):
-                    hc1, hc2, hc3 = st.columns([3, 3, 2])
-
-                    with hc1:
-                        st.markdown(f"#### #{job.get('job_no')} — {job.get('client_name')}")
-                        st.caption(f"🕒 Created: `{created_dt}`")
-                        st.caption(f"📅 Target Due: `{job.get('due_date')}`")
-                        
-                        if is_ret:
-                            st.markdown("<span style='color:#F87171; font-weight:700;'>● Defect / Returned</span>", unsafe_allow_html=True)
-                        elif stage == "SETTLED":
-                            st.markdown("<span style='color:#34D399; font-weight:700;'>● Settled / Complete</span>", unsafe_allow_html=True)
+            # Option 1: Approved -> Routes to Accounts (PAYMENT)
+            if action_choice == "Approved":
+                with st.popover(f"Confirm Approval #{job_no}", use_container_width=True):
+                    st.markdown(f"**Approve Job #{job_no}?**")
+                    st.caption("Marks design cleared and pushes order to Payment Clearance.")
+                    if st.button("Confirm Approval", key=f"btn_single_app_{jid}", type="primary", use_container_width=True):
+                        ok, msg = bulk_approve_design_jobs([jid], user["full_name"])
+                        if ok:
+                            st.success(f"Job #{job_no} approved and sent to Accounts.")
+                            st.rerun()
                         else:
-                            st.markdown(f"<span style='color:#FBBF24; font-weight:700;'>● Stage: {stage}</span>", unsafe_allow_html=True)
+                            st.error(msg)
 
-                    with hc2:
-                        st.markdown(f"🎨 **Assigned Designer:** `{job.get('assigned_designer') or 'Unassigned'}`")
-                        st.caption(f"👤 Contact: **{job.get('contact_person') or 'N/A'}** ({job.get('contact_phone') or 'N/A'})")
-                        st.caption(f"Sales Rep: `{job.get('order_taken_by') or 'N/A'}`")
-                        if items:
-                            item_str = ", ".join([f"{it.get('item_name')} (Qty: {it.get('quantity')} {it.get('unit')})" for it in items])
-                            st.caption(f"📦 Items: {item_str}")
-
-                    with hc3:
-                        proof_url = job.get("proof_file_url")
-                        if proof_url:
-                            st.link_button("👁️ View Proof File", proof_url, use_container_width=True)
+            # Option 2: Send to Sales -> Routes to SALES with return reason
+            elif action_choice == "Send to Sales":
+                with st.popover(f"Return #{job_no} to Sales", use_container_width=True):
+                    st.markdown(f"**Return Job #{job_no} to Sales Intake**")
+                    spec_note = st.text_input("Discrepancy Details *", placeholder="e.g. Dimensions incorrect, unreadable artwork", key=f"s_flag_note_{jid}")
+                    if st.button("Submit to Sales", key=f"btn_single_rej_{jid}", type="primary", use_container_width=True):
+                        if not spec_note.strip():
+                            st.error("Please explain the issue before returning.")
                         else:
-                            st.caption("No proof file attached")
+                            ok, msg = reject_job_to_sales(jid, user["full_name"], spec_note.strip())
+                            if ok:
+                                st.warning(f"Job #{job_no} returned to Sales.")
+                                st.rerun()
+                            else:
+                                st.error(msg)
 
-                        if is_elevated:
-                            tot_val = sum(float(it.get("amount", 0) or 0) for it in items)
-                            st.caption(f"Order Value: **₹ {tot_val:,.2f}**")
+        st.markdown("<hr style='margin: 4px 0 8px 0; border: none; border-top: 1px solid #edf2f7;' />", unsafe_allow_html=True)
+
+    # --- 15-Row Pagination Footer ---
+    if total_pages > 1:
+        st.markdown("<br>", unsafe_allow_html=True)
+        p_cols = st.columns([2, 1, 1, 1, 1, 1, 2])
+        with p_cols[1]:
+            if st.button("<", disabled=(curr_page == 1), key="des_p_prev_btn", use_container_width=True):
+                st.session_state.des_page_num = max(1, curr_page - 1)
+                st.rerun()
+
+        for p_idx in range(1, min(total_pages + 1, 5)):
+            with p_cols[1 + p_idx]:
+                is_active = (p_idx == curr_page)
+                btn_type = "primary" if is_active else "secondary"
+                if st.button(str(p_idx), type=btn_type, key=f"des_p_btn_{p_idx}", use_container_width=True):
+                    st.session_state.des_page_num = p_idx
+                    st.rerun()
+
+        with p_cols[6]:
+            if st.button(">", disabled=(curr_page == total_pages), key="des_p_next_btn", use_container_width=True):
+                st.session_state.des_page_num = min(total_pages, curr_page + 1)
+                st.rerun()

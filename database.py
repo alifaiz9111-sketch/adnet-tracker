@@ -568,3 +568,36 @@ def approve_and_forward_job(job_id: int, user_full_name: str, target_stage: str 
         return True, f"Approved and sent to {next_stage}", next_stage
     except Exception as e:
         return False, str(e), ""
+
+def bulk_approve_design_jobs(job_ids: list, user_name: str) -> tuple[bool, str]:
+    """Approves multiple design jobs and forwards them to PAYMENT (Accounts Clearance)."""
+    try:
+        payload = {
+            "current_stage": "PAYMENT",
+            "is_returned": False,
+            "return_reason": None,
+            "returned_by": None
+        }
+        for jid in job_ids:
+            supabase.table("jobs").update(payload).eq("job_id", int(jid)).execute()
+            log_audit(0, "DESIGN_APPROVED", f"Job #{jid} approved by {user_name} and routed to PAYMENT")
+        return True, f"{len(job_ids)} job(s) approved and sent to Accounts Clearance."
+    except Exception as e:
+        return False, str(e)
+
+
+def bulk_reject_design_jobs(job_ids: list, user_name: str, reason: str) -> tuple[bool, str]:
+    """Flags multiple design jobs with spec discrepancies and returns them to SALES."""
+    try:
+        payload = {
+            "current_stage": "SALES",
+            "is_returned": True,
+            "returned_by": f"Design Desk ({user_name})",
+            "return_reason": f"[SPEC_ISSUE] {reason.strip()}"
+        }
+        for jid in job_ids:
+            supabase.table("jobs").update(payload).eq("job_id", int(jid)).execute()
+            log_audit(0, "SPEC_ISSUE_FLAGGED", f"Job #{jid} flagged by {user_name}: {reason.strip()}")
+        return True, f"{len(job_ids)} job(s) returned to Sales."
+    except Exception as e:
+        return False, str(e)
