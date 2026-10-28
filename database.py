@@ -445,8 +445,9 @@ def record_payment_and_release(job_id, user_name, advance_received, balance_rema
     except Exception as e:
         return False, str(e)
 
+@st.cache_data(ttl=15, show_spinner=False)
 def get_station_pending_counts():
-    """Counts pending active jobs for each station stage."""
+    """Counts pending active jobs with a 15-second cache to prevent memory bloat."""
     counts = {
         "DESIGN": 0,
         "PAYMENT": 0,
@@ -457,7 +458,13 @@ def get_station_pending_counts():
         "DELETION_REQS": 0,
     }
     try:
-        res = supabase.table("jobs").select("current_stage, is_returned, return_reason").neq("current_stage", "SETTLED").execute()
+        res = (
+            supabase.table("jobs")
+            .select("current_stage, return_reason")
+            .neq("current_stage", "SETTLED")
+            .limit(200)
+            .execute()
+        )
         jobs = res.data or []
         for j in jobs:
             stg = j.get("current_stage")

@@ -23,21 +23,19 @@ from modules import (
     ceo_admin
 )
 
-# Load logo directly as a PIL Image object for reliable favicon rendering
 _base_dir = os.path.dirname(os.path.abspath(__file__))
-_logo_path = os.path.join(_base_dir, "assets", "Ad_logo.png")
+_candidate_favicons = [
+    os.path.join(_base_dir, "assets", "Ad_Logo.png"),
+    os.path.join(_base_dir, "assets", "Ad_logo.png"),
+    os.path.join(_base_dir, "assets", "Logo.png"),
+    os.path.join(_base_dir, "assets", "logo.png"),
+]
+_resolved_favicon_path = next((p for p in _candidate_favicons if os.path.exists(p)), None)
 
-if os.path.exists(_logo_path):
-    try:
-        _favicon = Image.open(_logo_path)
-    except Exception:
-        _favicon = "🖨️"
-else:
-    _favicon = "🖨️"
-
+# Pass the string filepath directly to save RAM instead of keeping open PIL handles
 st.set_page_config(
     page_title="AdNet Commercial Print & Sign Operations",
-    page_icon=_favicon,
+    page_icon=_resolved_favicon_path if _resolved_favicon_path else "🖨️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
