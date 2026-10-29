@@ -482,20 +482,20 @@ def render(user):
                         des_msg = f" (Assigned to: `{target_designer}`)" if routed_desk == "DESIGN" else ""
                         st.success(f"Job Sheet #{clean_job_no} created successfully and routed to `{routed_desk}`{des_msg}!")
                         st.session_state.sales_items = [{
-                        "item_name": "",
-                        "length": 1.0,
-                        "breadth": 1.0,
-                        "height": 1.0,
-                        "dim_unit": "Inch",
-                        "quantity": 0.0,
-                        "rate": 0.0,
-                        "amount": 0.0,
-                        "specifications": "",
-                        "delivery_address": "",
-                    }]
-                    if "s_manual_job_no" in st.session_state:
-                        del st.session_state["s_manual_job_no"]
-                    st.rerun()
+                            "item_name": "",
+                            "length": 1.0,
+                            "breadth": 1.0,
+                            "height": 1.0,
+                            "dim_unit": "Inch",
+                            "quantity": 0.0,
+                            "rate": 0.0,
+                            "amount": 0.0,
+                            "specifications": "",
+                            "delivery_address": "",
+                        }]
+                        if "s_manual_job_no" in st.session_state:
+                            del st.session_state["s_manual_job_no"]
+                        st.rerun()
                     else:
                         st.error(f"Failed to create jobsheet: {msg}")
 
@@ -613,7 +613,7 @@ def render(user):
         end_idx = min(start_idx + ROWS_PER_PAGE, total_records)
         page_records = filtered_jobs[start_idx:end_idx]
 
-          # Identify ticked jobs across the currently displayed page
+        # Identify ticked jobs across the currently displayed page
         selected_job_ids = [
             j["job_id"] for j in page_records 
             if st.session_state.get(f"tbl_chk_{j['job_id']}", False)
@@ -730,8 +730,8 @@ def render(user):
 
                 with r_prog:
                     st.markdown(
-                        f"<div class='adnet-progress-circle-red' style='background: conic-gradient(#13b0b3 {pct}%, #e2e8f0 0); border: 2px solid #ffffff;'>"
-                        f"<div style='background: #ffffff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #13b0b3; font-size: 10px; font-weight: 700;'>"
+                        f"<div class='adnet-progress-circle-red' style='background: conic-gradient(#E11D48 {pct}%, #e2e8f0 0); border: 2px solid #ffffff;'>"
+                        f"<div style='background: #ffffff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #BE123C; font-size: 10px; font-weight: 700;'>"
                         f"{pct}%</div></div>",
                         unsafe_allow_html=True
                     )
@@ -747,7 +747,7 @@ def render(user):
                 with r_act:
                     action_choice = st.selectbox(
                         "Action",
-                        options=["  ", "Edit", "Delete"],
+                        options=["Select Action", "Edit", "Delete"],
                         index=0,
                         key=f"act_drp_{jid}",
                         label_visibility="collapsed"
