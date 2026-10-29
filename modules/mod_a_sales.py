@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime
 import streamlit as st
 from database import (
@@ -52,6 +53,43 @@ def _recalc_on_dim_change(idx):
     item["breadth"] = float(st.session_state.get(f"item_brd_{idx}", item["breadth"]))
     item["height"] = float(st.session_state.get(f"item_hgt_{idx}", item["height"]))
     _sync_commercials(idx, "rate")
+
+
+def _parse_spec_dimensions(spec_str):
+    """Extracts (L, B, H, unit, clean_spec) from a formatted spec string."""
+    if not spec_str:
+        return 1.0, 1.0, 1.0, "Inch", ""
+    pattern = r"Size:\s*([\d.]+)\s*x\s*([\d.]+)\s*x\s*([\d.]+)\s*(Inch|Ft)(?:\s*\|\s*(.*))?"
+    m = re.match(pattern, spec_str.strip(), re.IGNORECASE)
+    if m:
+        try:
+            l_val = float(m.group(1))
+            b_val = float(m.group(2))
+            h_val = float(m.group(3))
+            unit_val = "Ft" if m.group(4).lower() == "ft" else "Inch"
+            notes = (m.group(5) or "").strip()
+            return l_val, b_val, h_val, unit_val, notes
+        except Exception:
+            pass
+    return 1.0, 1.0, 1.0, "Inch", spec_str.strip()
+
+
+def _sync_edit_commercials(jid, idx, trigger_field):
+    l_val = float(st.session_state.get(f"ei_l_{jid}_{idx}", 1.0))
+    b_val = float(st.session_state.get(f"ei_b_{jid}_{idx}", 1.0))
+    h_val = float(st.session_state.get(f"ei_h_{jid}_{idx}", 1.0))
+    dim_factor = (l_val if l_val > 0 else 1.0) * (b_val if b_val > 0 else 1.0) * (h_val if h_val > 0 else 1.0)
+
+    qty = float(st.session_state.get(f"ei_q_{jid}_{idx}", 1.0))
+    rate = float(st.session_state.get(f"ei_r_{jid}_{idx}", 0.0))
+    amt = float(st.session_state.get(f"ei_amt_{jid}_{idx}", 0.0))
+
+    if trigger_field in ["dim", "qty", "rate"]:
+        new_amt = round(dim_factor * qty * rate, 2)
+        st.session_state[f"ei_amt_{jid}_{idx}"] = new_amt
+    elif trigger_field == "amount":
+        if qty > 0 and dim_factor > 0:
+            st.session_state[f"ei_r_{jid}_{idx}"] = round(amt / (dim_factor * qty), 2)
 
 
 def render(user):
@@ -831,25 +869,108 @@ def render(user):
                                 with st.container(border=True):
                                     st.caption(f"Item #{idx+1}")
                                     ei_name = st.text_input("Item Name *", value=it.get("item_name", ""), key=f"ei_nm_{jid}_{idx}")
-                                    ei_spec = st.text_input("Specifications / Dimensions", value=it.get("specifications", ""), key=f"ei_sp_{jid}_{idx}")
-                                    
+
+                                    def_l, def_b, def_h, def_u, def_notes = _parse_spec_dimensions(it.get("specifications", ""))
+
+                                    st.caption("Sizes / Dimensions (Default: 1 x 1 x 1):")
+                                    ed_s1, ed_s2, ed_s3, ed_s4 = st.columns(4)
+                                    with ed_s1:
+                                        ei_l = st.number_input(
+                                            "Length (L)",
+                                            min_value=0.0,
+                                            value=def_l,
+                                            step=1.0,
+                                            key=f"ei_l_{jid}_{idx}",
+                                            on_change=_sync_edit_commercials,
+                                            args=(jid, idx, "dim"),
+                                        )
+                                    with ed_s2:
+                                        ei_b = st.number_input(
+                                            "Breadth / Width (B)",
+                                            min_value=0.0,
+                                            value=def_b,
+                                            step=1.0,
+                                            key=f"ei_b_{jid}_{idx}",
+                                            on_change=_sync_edit_commercials,
+                                            args=(jid, idx, "dim"),
+                                        )
+                                    with ed_s3:
+                                        ei_h = st.number_input(
+                                            "Height / Depth (H)",
+                                            min_value=0.0,
+                                            value=def_h,
+                                            step=0.5,
+                                            key=f"ei_h_{jid}_{idx}",
+                                            on_change=_sync_edit_commercials,
+                                            args=(jid, idx, "dim"),
+                                        )
+                                    with ed_s4:
+                                        unit_opts = ["Inch", "Ft"]
+                                        u_idx = unit_opts.index(def_u) if def_u in unit_opts else 0
+                                        ei_unit = st.selectbox(
+                                            "Size Unit",
+                                            unit_opts,
+                                            index=u_idx,
+                                            key=f"ei_u_{jid}_{idx}",
+                                        )
+
+                                    st.caption("Commercials (Fill any 2 fields to auto-calculate the 3rd):")
                                     iq1, iq2, iq3 = st.columns(3)
                                     with iq1:
-                                        ei_qty = st.number_input("Quantity", value=float(it.get("quantity", 1)), min_value=0.01, step=1.0, key=f"ei_q_{jid}_{idx}")
+                                        ei_qty = st.number_input(
+                                            "Quantity",
+                                            value=float(it.get("quantity", 1.0)),
+                                            min_value=0.0,
+                                            step=1.0,
+                                            key=f"ei_q_{jid}_{idx}",
+                                            on_change=_sync_edit_commercials,
+                                            args=(jid, idx, "qty"),
+                                        )
                                     with iq2:
-                                        ei_rate = st.number_input("Rate (INR)", value=float(it.get("rate", 0)), min_value=0.0, step=10.0, key=f"ei_r_{jid}_{idx}")
+                                        ei_rate = st.number_input(
+                                            "Rate (INR)",
+                                            value=float(it.get("rate", 0.0)),
+                                            min_value=0.0,
+                                            step=10.0,
+                                            key=f"ei_r_{jid}_{idx}",
+                                            on_change=_sync_edit_commercials,
+                                            args=(jid, idx, "rate"),
+                                        )
                                     with iq3:
-                                        ei_amt = st.number_input("Amount (INR)", value=float(it.get("amount", 0.0)), min_value=0.0, step=50.0, key=f"ei_amt_{jid}_{idx}")
+                                        ei_amt = st.number_input(
+                                            "Total Amount (INR)",
+                                            value=float(it.get("amount", 0.0)),
+                                            min_value=0.0,
+                                            step=50.0,
+                                            key=f"ei_amt_{jid}_{idx}",
+                                            on_change=_sync_edit_commercials,
+                                            args=(jid, idx, "amount"),
+                                        )
 
-                                    ei_addr = st.text_input("Delivery Destination", value=it.get("delivery_address", ""), key=f"ei_ad_{jid}_{idx}")
+                                    ei_spec_notes = st.text_input(
+                                        "Technical Specifications / Material Notes",
+                                        value=def_notes,
+                                        placeholder="e.g. 5mm Clear Acrylic, 3M vinyl",
+                                        key=f"ei_sp_{jid}_{idx}",
+                                    )
+
+                                    ei_addr = st.text_input(
+                                        "Delivery Destination",
+                                        value=it.get("delivery_address", ""),
+                                        key=f"ei_ad_{jid}_{idx}",
+                                    )
+
+                                    size_str = f"Size: {ei_l} x {ei_b} x {ei_h} {ei_unit}"
+                                    full_spec = f"{size_str} | {ei_spec_notes.strip()}" if ei_spec_notes.strip() else size_str
+
                                     edited_items.append({
                                         "item_name": ei_name.strip(),
-                                        "specifications": ei_spec.strip(),
+                                        "specifications": full_spec,
                                         "quantity": ei_qty,
                                         "unit": it.get("unit", "Pcs"),
                                         "rate": ei_rate,
                                         "amount": ei_amt,
-                                        "delivery_address": ei_addr.strip()
+                                        "delivery_address": ei_addr.strip(),
                                     })
 
                             if st.button("Save Changes", key=f"btn_save_edit_{jid}", type="primary", use_container_width=True):
