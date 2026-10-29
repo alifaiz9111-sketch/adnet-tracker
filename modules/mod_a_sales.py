@@ -458,17 +458,18 @@ def render(user):
                     for it in st.session_state.sales_items:
                         size_str = f"Size: {it.get('length', 1.0)} x {it.get('breadth', 1.0)} x {it.get('height', 1.0)} {it.get('dim_unit', 'Inch')}"
                         full_spec = it.get("specifications", "").strip()
-                        full_spec = f"{size_str} | {full_spec}" if full_spec else size_str
+                        if size_str:
+                            full_spec = f"{size_str} | {full_spec}" if full_spec else size_str
 
-                    prepared_items.append({
-                        "item_name": it["item_name"].strip(),
-                        "specifications": full_spec,
-                        "quantity": it["quantity"],
-                        "unit": "Pcs",
-                        "rate": it["rate"],
-                        "amount": it["amount"],
-                        "delivery_address": it.get("delivery_address", "").strip(),
-                    })
+                        prepared_items.append({
+                            "item_name": it["item_name"].strip(),
+                            "specifications": full_spec,
+                            "quantity": it["quantity"],
+                            "unit": "Pcs",
+                            "rate": it["rate"],
+                            "amount": it["amount"],
+                            "delivery_address": it.get("delivery_address", "").strip(),
+                        })
 
                     ok, msg = create_job_sheet(header_payload, prepared_items)
                     if ok:
