@@ -42,11 +42,13 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# I# Initialize Session State
+# Initialize Session State
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "user" not in st.session_state:
     st.session_state.user = None
+if "nav_station" not in st.session_state:
+    st.session_state.nav_station = None
 
 
 def inject_custom_css():
@@ -297,6 +299,7 @@ def main():
         if "MOD_CA" in user_perms or account_type in ["SUPER_ADMIN", "CEO", "MANAGER", "STAFF"]:
             menu_config.append(("CA_AUDIT", "Tax & Compliance", mod_ca_audit.render))
 
+        
         if not menu_config:
             st.warning("No active module permissions assigned. Please contact the administrator.")
             selected_key = None
@@ -305,11 +308,17 @@ def main():
             labels_map = {item[0]: item[1] for item in menu_config}
             handlers_map = {item[0]: item[2] for item in menu_config}
 
+            default_idx = 0
+            if st.session_state.nav_station in keys:
+                default_idx = keys.index(st.session_state.nav_station)
+
             selected_key = st.radio(
                 "Navigate Station",
                 options=keys,
+                index=default_idx,
                 format_func=lambda k: labels_map[k]
             )
+            st.session_state.nav_station = selected_key
 
         st.markdown("---")
         with st.popover("🔑 Change Password", use_container_width=True):
