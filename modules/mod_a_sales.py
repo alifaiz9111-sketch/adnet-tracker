@@ -239,8 +239,8 @@ def render(user):
                     if "Broadcast" not in chosen:
                         target_designer = chosen.split(" (@")[0].strip()
 
-                gstin = ""
-                place_of_supply = "19 - West Bengal"
+                    gstin = ""
+                    place_of_supply = "19 - West Bengal"
 
                 if is_gst:
                     st.markdown("##### GST Compliance Information")
@@ -851,49 +851,3 @@ def render(user):
                             if st.button("Save Changes", key=f"btn_save_edit_{jid}", type="primary", use_container_width=True):
                                 if not ed_client:
                                     st.error("Client name is required.")
-                                elif ed_is_gst and (not ed_gstin or len(ed_gstin) < 15):
-                                    st.error("Valid 15-character GSTIN is required for GST invoices.")
-                                else:
-                                    h_payload = {
-                                        "client_name": ed_client,
-                                        "contact_person": ed_contact,
-                                        "contact_phone": ed_phone,
-                                        "due_date": str(ed_due),
-                                        "current_stage": ed_stage,
-                                        "assigned_designer": ed_designer,
-                                        "billing_type": "GST" if ed_is_gst else "NON_GST",
-                                        "gstin": ed_gstin if ed_is_gst else None,
-                                        "billing_address": ed_baddr if ed_is_gst else None,
-                                        "place_of_supply": ed_pos if ed_is_gst else None,
-                                    }
-                                    ok, upd_msg = update_job_sheet_by_management(jid, h_payload, edited_items)
-                                    if ok:
-                                        log_audit(user["user_id"], "JOB_MODIFIED", f"Updated jobsheet #{job_no}")
-                                        st.success("Jobsheet updated successfully.")
-                                        st.rerun()
-                                    else:
-                                        st.error(f"Update failed: {upd_msg}")
-
-                st.markdown("<hr style='margin: 4px 0 8px 0; border: none; border-top: 1px solid #edf2f7;' />", unsafe_allow_html=True)
-
-        # Pagination Control Bar
-        if total_pages > 1:
-            st.markdown("<br>", unsafe_allow_html=True)
-            p_cols = st.columns([2, 1, 1, 1, 1, 1, 2])
-            with p_cols[1]:
-                if st.button("<", disabled=(curr_page == 1), key="p_prev_btn", use_container_width=True):
-                    st.session_state.sales_page_num = max(1, curr_page - 1)
-                    st.rerun()
-
-            for p_idx in range(1, min(total_pages + 1, 5)):
-                with p_cols[1 + p_idx]:
-                    is_active = (p_idx == curr_page)
-                    btn_type = "primary" if is_active else "secondary"
-                    if st.button(str(p_idx), type=btn_type, key=f"p_btn_{p_idx}", use_container_width=True):
-                        st.session_state.sales_page_num = p_idx
-                        st.rerun()
-
-            with p_cols[6]:
-                if st.button(">", disabled=(curr_page == total_pages), key="p_next_btn", use_container_width=True):
-                    st.session_state.sales_page_num = min(total_pages, curr_page + 1)
-                    st.rerun()
