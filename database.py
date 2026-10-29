@@ -501,3 +501,113 @@ def add_custom_preset(preset_type: str, preset_name: str) -> bool:
         return True
     except Exception:
         return False
+
+import uuid
+
+# --- DISPATCH STORAGE UPLOAD ---
+
+def upload_dispatch_file(uploaded_file, folder_name: str) -> str:
+    """Uploads an in-memory file to Supabase Storage and returns its public URL."""
+    if not uploaded_file:
+        return None
+    try:
+        file_ext = uploaded_file.name.split(".")[-1]
+        file_name = f"{folder_name}/{uuid.uuid4().hex}.{file_ext}"
+        file_bytes = uploaded_file.getvalue()
+
+        # Upload to Supabase Storage bucket 'dispatch-media'
+        supabase.storage.from_("dispatch-media").upload(
+            file_name,
+            file_bytes,
+            {"content-type": uploaded_file.type}
+        )
+
+        return supabase.storage.from_("dispatch-media").get_public_url(file_name)
+    except Exception as e:
+        print(f"Error uploading file: {e}")
+        return None
+
+
+# --- WORKFLOW FORWARDING & BULK ACTIONS ---
+
+def approve_and_forward_job(job_id: int, user_full_name: str, target_stage: str = None, user_id=None) -> tuple[bool, str, str]:
+    """
+    Approves and routes a job forward based on workflow stage hierarchy:
+    DESIGN -> PAYMENT -> PRODUCTION -> QC -> DISPATCH -> BILLING_REVIEW -> SETTLED
+    """
+    try:
+        res = supabase.table("jobs").select("job_no, current_stage").eq("job_id", int(job_id)).execute()
+        if not res.data:
+            return False, "Job not found", ""
+
+        job_data = res.data[0]
+        cur_stg = job_data.get("current_stage", "DESIGN")
+        job_num = job_data.get("job_no", "")
+
+        workflow_stages = [
+            "DESIGN",
+            "PAYMENT",
+            "PRODUCTION",
+            "QC",
+            "DISPATCH",
+            "BILLING_REVIEW",
+            "SETTLED"
+        ]
+
+        if target_stage and target_stage in workflow_stages:
+            next_stage = target_stage
+        else:
+            if cur_stg in workflow_stages:
+                cur_idx = workflow_stages.index(cur_stg)
+                next_stage = workflow_stages[cur_idx + 1] if cur_idx < len(workflow_stages) - 1 else cur_stg
+            else:
+                next_stage = "DESIGN"
+
+        update_payload = {
+            "current_stage": next_stage,
+            "is_returned": False,
+            "return_reason": None,
+        }
+        if next_stage == "PRODUCTION":
+            update_payload["accounts_cleared_by"] = user_full_name
+
+        supabase.table("jobs").update(update_payload).eq("job_id", int(job_id)).execute()
+
+        log_audit(user_id, "STAGE_FORWARDED", f"Job #{job_num} approved by {user_full_name} and routed to {next_stage}")
+        return True, f"Approved and sent to {next_stage}", next_stage
+    except Exception as e:
+        return False, str(e), ""
+
+
+def bulk_approve_design_jobs(job_ids: list, user_name: str, user_id=None) -> tuple[bool, str]:
+    """Approves multiple design jobs and forwards them to PAYMENT (Accounts Clearance)."""
+    try:
+        payload = {
+            "current_stage": "PAYMENT",
+            "is_returned": False,
+            "return_reason": None,
+            "returned_by": None
+        }
+        for jid in job_ids:
+            supabase.table("jobs").update(payload).eq("job_id", int(jid)).execute()
+            log_audit(user_id, "DESIGN_APPROVED", f"Job #{jid} approved by {user_name} and routed to PAYMENT")
+        return True, f"{len(job_ids)} job(s) approved and sent to Accounts Clearance."
+    except Exception as e:
+        return False, str(e)
+
+
+def bulk_reject_design_jobs(job_ids: list, user_name: str, reason: str, user_id=None) -> tuple[bool, str]:
+    """Flags multiple design jobs with spec discrepancies and returns them to SALES."""
+    try:
+        payload = {
+            "current_stage": "SALES",
+            "is_returned": True,
+            "returned_by": f"Design Desk ({user_name})",
+            "return_reason": f"[SPEC_ISSUE] {reason.strip()}"
+        }
+        for jid in job_ids:
+            supabase.table("jobs").update(payload).eq("job_id", int(jid)).execute()
+            log_audit(user_id, "SPEC_ISSUE_FLAGGED", f"Job #{jid} flagged by {user_name}: {reason.strip()}")
+        return True, f"{len(job_ids)} job(s) returned to Sales."
+    except Exception as e:
+        return False, str(e)
