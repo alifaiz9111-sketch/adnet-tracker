@@ -482,19 +482,20 @@ def render(user):
                         des_msg = f" (Assigned to: `{target_designer}`)" if routed_desk == "DESIGN" else ""
                         st.success(f"Job Sheet #{clean_job_no} created successfully and routed to `{routed_desk}`{des_msg}!")
                         st.session_state.sales_items = [{
-                            "item_name": "",
-                            "length": 1.0,
-                            "breadth": 1.0,
-                            "height": 1.0,
-                            "dim_unit": "Inch",
-                            "quantity": 0.0,
-                            "rate": 0.0,
-                            "amount": 0.0,
-                            "specifications": "",
-                            "delivery_address": "",
-                        }]
-                        st.session_state["s_manual_job_no"] = str(get_next_job_no())
-                        st.rerun()
+                        "item_name": "",
+                        "length": 1.0,
+                        "breadth": 1.0,
+                        "height": 1.0,
+                        "dim_unit": "Inch",
+                        "quantity": 0.0,
+                        "rate": 0.0,
+                        "amount": 0.0,
+                        "specifications": "",
+                        "delivery_address": "",
+                    }]
+                    if "s_manual_job_no" in st.session_state:
+                        del st.session_state["s_manual_job_no"]
+                    st.rerun()
                     else:
                         st.error(f"Failed to create jobsheet: {msg}")
 
