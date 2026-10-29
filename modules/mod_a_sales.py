@@ -817,7 +817,12 @@ def render(user):
                                     pos_opts = ["19 - West Bengal", "10 - Bihar", "20 - Jharkhand", "21 - Odisha", "18 - Assam", "07 - Delhi", "27 - Maharashtra", "Other State"]
                                     pos_idx = pos_opts.index(ed_pos) if ed_pos in pos_opts else 0
                                     ed_pos = st.selectbox("Place of Supply *", pos_opts, index=pos_idx, key=f"ed_pos_{jid}")
-                                ed_baddr = st.text_input("Billing Address *", value=ed_baddr, key=f"ed_baddr_{jid}").strip()
+
+                            ed_baddr = st.text_input(
+                                "Billing Address" + (" *" if ed_is_gst else " (Optional)"),
+                                value=ed_baddr,
+                                key=f"ed_baddr_{jid}"
+                            ).strip()
 
                             st.markdown("---")
                             st.markdown("##### Ordered Line Items & Deliverables")
@@ -834,8 +839,7 @@ def render(user):
                                     with iq2:
                                         ei_rate = st.number_input("Rate (INR)", value=float(it.get("rate", 0)), min_value=0.0, step=10.0, key=f"ei_r_{jid}_{idx}")
                                     with iq3:
-                                        ei_amt = round(ei_qty * ei_rate, 2)
-                                        st.metric("Amount", f"INR {ei_amt:,.2f}")
+                                        ei_amt = st.number_input("Amount (INR)", value=float(it.get("amount", 0.0)), min_value=0.0, step=50.0, key=f"ei_amt_{jid}_{idx}")
 
                                     ei_addr = st.text_input("Delivery Destination", value=it.get("delivery_address", ""), key=f"ei_ad_{jid}_{idx}")
                                     edited_items.append({
