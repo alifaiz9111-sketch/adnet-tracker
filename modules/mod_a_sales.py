@@ -247,8 +247,13 @@ def render(user):
                         key="s_route",
                     )
 
-                # Row 3: Client Entity, Contact, Phone, and Assigned Designer
-                r3_c1, r3_c2, r3_c3, r3_c4 = st.columns([2.5, 2.5, 2.5, 2.5])
+                # Row 3: Client Entity, Contact, Phone, and Assigned Designer (Conditional)
+                target_designer = None
+                if routed_desk == "DESIGN":
+                    r3_c1, r3_c2, r3_c3, r3_c4 = st.columns([2.5, 2.5, 2.5, 2.5])
+                else:
+                    r3_c1, r3_c2, r3_c3 = st.columns([3.3, 3.3, 3.4])
+
                 with r3_c1:
                     client_name = st.text_input(
                         "Client / Corporate Entity *",
@@ -267,15 +272,17 @@ def render(user):
                         placeholder="e.g. 9830112233",
                         key="s_phone"
                     ).strip()
-                with r3_c4:
-                    target_designer = "OPEN_POOL"
-                    designers_list = get_all_designers()
-                    des_options = ["Broadcast to All Designers (Open Claim)"] + [
-                        f"{d['full_name']} (@{d['username']})" for d in designers_list
-                    ]
-                    chosen = st.selectbox("Assign Designer *", options=des_options, key="s_des_choice")
-                    if "Broadcast" not in chosen:
-                        target_designer = chosen.split(" (@")[0].strip()
+
+                if routed_desk == "DESIGN":
+                    with r3_c4:
+                        target_designer = "OPEN_POOL"
+                        designers_list = get_all_designers()
+                        des_options = ["Broadcast to All Designers (Open Claim)"] + [
+                            f"{d['full_name']} (@{d['username']})" for d in designers_list
+                        ]
+                        chosen = st.selectbox("Assign Designer *", options=des_options, key="s_des_choice")
+                        if "Broadcast" not in chosen:
+                            target_designer = chosen.split(" (@")[0].strip()
 
                     gstin = ""
                     place_of_supply = "19 - West Bengal"
@@ -837,11 +844,13 @@ def render(user):
                                 cur_st_idx = stage_list.index(j.get("current_stage")) if j.get("current_stage") in stage_list else 0
                                 ed_stage = st.selectbox("Routing Stage *", stage_list, index=cur_st_idx, key=f"ed_stg_{jid}")
 
-                            designers_all = get_all_designers()
-                            d_names = ["OPEN_POOL"] + [d["full_name"] for d in designers_all]
-                            cur_des = j.get("assigned_designer") or "OPEN_POOL"
-                            d_idx = d_names.index(cur_des) if cur_des in d_names else 0
-                            ed_designer = st.selectbox("Assigned Designer", options=d_names, index=d_idx, key=f"ed_des_{jid}")
+                            ed_designer = None
+                            if ed_stage == "DESIGN":
+                                designers_all = get_all_designers()
+                                d_names = ["OPEN_POOL"] + [d["full_name"] for d in designers_all]
+                                cur_des = j.get("assigned_designer") or "OPEN_POOL"
+                                d_idx = d_names.index(cur_des) if cur_des in d_names else 0
+                                ed_designer = st.selectbox("Assigned Designer *", options=d_names, index=d_idx, key=f"ed_des_{jid}")
 
                             ed_gstin = j.get("gstin", "") or ""
                             ed_baddr = j.get("billing_address", "") or ""
