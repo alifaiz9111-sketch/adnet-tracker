@@ -6,7 +6,7 @@ from supabase import create_client, Client
 
 IST = pytz.timezone("Asia/Kolkata")
 
-# Credentials strictly via secrets or env (No hardcoded fallback secrets)
+# Fetch credentials with fallbacks (Supports Streamlit Cloud Secrets, OS env, and direct fallback)
 SUPABASE_URL = ""
 SUPABASE_KEY = ""
 
@@ -20,75 +20,22 @@ try:
 except Exception:
     pass
 
+# Environment variable fallbacks
 if not SUPABASE_URL:
-    SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+    SUPABASE_URL = os.getenv("SUPABASE_URL", "https://ddyeogqnfrlzqerwlqjr.supabase.co")
 if not SUPABASE_KEY:
-    SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
-
-if not SUPABASE_URL or not SUPABASE_KEY:
-    st.error("Supabase credentials missing! Configure SUPABASE_URL and SUPABASE_KEY in Streamlit Secrets or Environment Variables.")
-    st.stop()
+    SUPABASE_KEY = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRkeWVvZ3FuZnJsenFlcndscWpyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDk1ODMzOCwiZXhwIjoyMTA2NTM0MzM4fQ.wO2KaJd82bkYbrcDjui_3OdzpBg-gGn9XTFVt38h6rg")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-
-# --- FLASH MESSAGE UTILITY ---
-
-def flash(msg: str, kind: str = "success"):
-    """Stores temporary banner/toast messages across st.rerun()."""
-    st.session_state["_flash"] = (kind, msg)
-
-def show_flash():
-    """Displays queued message at the top of the workspace."""
-    f = st.session_state.pop("_flash", None)
-    if f:
-        kind, msg = f
-        if kind == "success":
-            st.toast(msg, icon="✅")
-        elif kind == "error":
-            st.error(msg)
-        elif kind == "warning":
-            st.warning(msg)
-        else:
-            st.info(msg)
-
-
-# --- BATCH QUERY HELPERS (BYPASS 1000 ROW LIMIT) ---
-
-def fetch_all(query_fn, page_size: int = 1000):
-    """Paginates queries through Supabase to bypass the hard 1000-record threshold."""
-    rows = []
-    start = 0
-    while True:
-        res = query_fn().range(start, start + page_size - 1).execute()
-        batch = res.data or []
-        rows.extend(batch)
-        if len(batch) < page_size:
-            break
-        start += page_size
-    return rows
-
-def get_items_for_jobs(job_ids: list):
-    """Batched query returning items mapped by job_id."""
-    out = {}
-    ids = list(set(job_ids))
-    if not ids:
-        return out
-    for i in range(0, len(ids), 200):
-        chunk = ids[i:i + 200]
-        res = supabase.table("job_items").select("*").in_("job_id", chunk).order("item_id").execute()
-        for it in (res.data or []):
-            out.setdefault(it["job_id"], []).append(it)
-    return out
 
 
 # --- AUDIT & AUTHENTICATION ---
 
 def log_audit(user_id, action, details=""):
+    """Logs system events and user actions to audit_logs."""
     try:
-        u_id = int(user_id) if user_id and str(user_id).isdigit() else None
         payload = {
-            "user_id": u_id,
+            "user_id": int(user_id) if user_id else None,
             "action": action,
             "details": details,
             "created_at": datetime.now(IST).isoformat()
@@ -98,7 +45,9 @@ def log_audit(user_id, action, details=""):
     except Exception:
         return False
 
+
 def authenticate_user(username, password):
+    """Authenticates staff/admin user against password_hash and validates active status."""
     try:
         res = (
             supabase.table("users")
@@ -124,7 +73,9 @@ def authenticate_user(username, password):
         return None
 
 def update_user_password(user_id, old_password, new_password):
+    """Allows an active user to change their password after verifying their old password."""
     try:
+        # Verify old password
         res = (
             supabase.table("users")
             .select("user_id")
@@ -135,11 +86,12 @@ def update_user_password(user_id, old_password, new_password):
         if not res.data:
             return False, "Current password does not match."
 
+        # Update to new password
         supabase.table("users").update({
             "password_hash": new_password.strip()
         }).eq("user_id", int(user_id)).execute()
 
-        log_audit(user_id, "PASSWORD_CHANGED", "User successfully changed password.")
+        log_audit(user_id, "PASSWORD_CHANGED", "User successfully changed their password.")
         return True, "Password updated successfully!"
     except Exception as e:
         return False, str(e)
@@ -153,6 +105,7 @@ def get_all_users():
         return res.data or []
     except Exception:
         return []
+
 
 def create_user(username, password, full_name, account_type, permissions, emp_code="", phone="", email="", primary_station="", can_manage_vendors=False):
     try:
@@ -195,6 +148,7 @@ def update_user_permissions(user_id, account_type, permissions, can_manage_vendo
     except Exception as e:
         return False, str(e)
 
+
 def delete_user(user_id):
     try:
         supabase.table("users").delete().eq("user_id", int(user_id)).execute()
@@ -202,12 +156,14 @@ def delete_user(user_id):
     except Exception as e:
         return False, str(e)
 
+
 def get_all_vendors():
     try:
         res = supabase.table("vendors").select("*").order("vendor_id").execute()
         return res.data or []
     except Exception:
         return []
+
 
 def create_vendor(vendor_name, contact_person="", phone="", category="", city="Kolkata"):
     try:
@@ -225,12 +181,14 @@ def create_vendor(vendor_name, contact_person="", phone="", category="", city="K
     except Exception as e:
         return False, str(e)
 
+
 def update_vendor_status(vendor_id, is_active):
     try:
         supabase.table("vendors").update({"is_active": is_active}).eq("vendor_id", int(vendor_id)).execute()
         return True, "Vendor status updated."
     except Exception as e:
         return False, str(e)
+
 
 def delete_vendor(vendor_id):
     try:
@@ -243,133 +201,146 @@ def delete_vendor(vendor_id):
 # --- JOB SHEET & ITEM HELPERS ---
 
 def get_next_job_no():
+    """Universally fetches the latest job number and generates the next sequential number."""
     try:
-        res = supabase.table("jobs").select("job_no, job_id").order("job_id", desc=True).limit(20).execute()
+        # Fetch the most recent jobs by descending job_id
+        res = supabase.table("jobs").select("job_no, job_id").order("job_id", desc=True).limit(10).execute()
         data = res.data or []
+        
         max_num = 1000
         for row in data:
-            digits = "".join(filter(str.isdigit, str(row.get("job_no", ""))))
+            val = str(row.get("job_no", ""))
+            digits = "".join(filter(str.isdigit, val))
             if digits:
                 num = int(digits)
                 if num > max_num:
                     max_num = num
+        
         return str(max_num + 1)
-    except Exception:
+    except Exception as e:
+        print(f"Error fetching next job number: {e}")
         return "1001"
 
-def create_job_sheet(job_payload: dict, items_data: list):
-    """Inserts header and line items atomically. Cleans header if line-item insertion crashes."""
-    job_id = None
+
+def create_job_sheet(job_payload, items_data):
     try:
         res = supabase.table("jobs").insert(job_payload).execute()
         if not res.data:
-            return False, "Failed to insert jobsheet header."
+            return False, "Failed to insert job header."
         
         job_id = res.data[0]["job_id"]
-        prepared_rows = []
         for idx, item in enumerate(items_data, 1):
-            prepared_rows.append({
+            item_payload = {
                 "job_id": job_id,
                 "item_no": idx,
-                "item_name": item["item_name"].strip(),
+                "item_name": item["item_name"],
                 "specifications": item.get("specifications", ""),
                 "description_spec": item.get("specifications", ""),
-                "quantity": float(item["quantity"]),
-                "unit": item.get("unit", "Pcs"),
-                "rate": float(item["rate"]),
-                "amount": float(item["amount"]),
-                "delivery_address": item.get("delivery_address", "").strip(),
+                "quantity": item["quantity"],
+                "unit": item["unit"],
+                "rate": item["rate"],
+                "amount": item["amount"],
+                "delivery_address": item.get("delivery_address", ""),
                 "is_delivered": False
-            })
-
-        if prepared_rows:
-            supabase.table("job_items").insert(prepared_rows).execute()
-
+            }
+            supabase.table("job_items").insert(item_payload).execute()
         return True, res.data
     except Exception as e:
-        if job_id:
-            # Rollback dangling header
-            try:
-                supabase.table("jobs").delete().eq("job_id", job_id).execute()
-            except Exception:
-                pass
         return False, str(e)
+
 
 def get_job_items(job_id):
     try:
-        res = supabase.table("job_items").select("*").eq("job_id", int(job_id)).order("item_no").execute()
+        res = supabase.table("job_items").select("*").eq("job_id", int(job_id)).order("item_id").execute()
         return res.data or []
     except Exception:
         return []
+
 
 def get_user_created_jobs(user_name, is_management=False):
     try:
         query = supabase.table("jobs").select("*").order("job_id", desc=True)
         if not is_management:
-            query = query.eq("order_taken_by", user_name.strip())
+            query = query.ilike("order_taken_by", f"%{user_name.strip()}%")
         res = query.execute()
         return res.data or []
     except Exception:
         return []
 
+
 def extend_job_deadline(job_id, user_id, new_due_date, reason=""):
     try:
         supabase.table("jobs").update({"due_date": str(new_due_date)}).eq("job_id", int(job_id)).execute()
-        log_audit(user_id, "DEADLINE_EXTENDED", f"Job ID #{job_id} deadline moved to {new_due_date}. Reason: {reason}")
+        log_audit(user_id, "DEADLINE_EXTENDED", f"Job ID {job_id} deadline moved to {new_due_date}. Reason: {reason}")
         return True, "Deadline updated."
     except Exception as e:
         return False, str(e)
 
+
 def delete_job_sheet(job_id):
     try:
         supabase.table("job_items").delete().eq("job_id", int(job_id)).execute()
-        res = supabase.table("jobs").delete().eq("job_id", int(job_id)).execute()
-        if res.data:
-            return True, "Job sheet deleted."
-        return False, "Record could not be removed."
+        supabase.table("jobs").delete().eq("job_id", int(job_id)).execute()
+        return True, "Job sheet deleted."
+    except Exception as e:
+        return False, str(e)
+
+def update_user_password(user_id, old_password, new_password):
+    """Allows an active user to change their password after verifying their old password."""
+    try:
+        res = (
+            supabase.table("users")
+            .select("user_id")
+            .eq("user_id", int(user_id))
+            .eq("password_hash", old_password.strip())
+            .execute()
+        )
+        if not res.data:
+            return False, "Current password does not match."
+
+        supabase.table("users").update({
+            "password_hash": new_password.strip()
+        }).eq("user_id", int(user_id)).execute()
+
+        log_audit(user_id, "PASSWORD_CHANGED", "User successfully changed their password.")
+        return True, "Password updated successfully!"
+    except Exception as e:
+        return False, str(e)
+
+
+def update_user_permissions(user_id, account_type, permissions, can_manage_vendors, primary_station=""):
+    """Updates roles, permissions, vendor privileges, and station for an existing staff member."""
+    try:
+        payload = {
+            "account_type": account_type,
+            "permissions": permissions,
+            "can_manage_vendors": can_manage_vendors,
+            "primary_station": primary_station.strip()
+        }
+        supabase.table("users").update(payload).eq("user_id", int(user_id)).execute()
+        return True, "User permissions updated successfully."
     except Exception as e:
         return False, str(e)
 
 def update_job_sheet_by_management(job_id, header_payload, line_items):
-    """Updates jobsheet header and restores items safely with automatic rollback."""
-    jid = int(job_id)
-    old_items = get_job_items(jid)
+    """Allows Manager, CEO, and Admin to edit jobsheet header and line items."""
     try:
-        supabase.table("jobs").update(header_payload).eq("job_id", jid).execute()
+        # 1. Update jobs header
+        supabase.table("jobs").update(header_payload).eq("job_id", int(job_id)).execute()
 
-        new_rows = []
-        for idx, it in enumerate(line_items, 1):
-            new_rows.append({
-                "job_id": jid,
-                "item_no": idx,
-                "item_name": it["item_name"].strip(),
-                "specifications": it.get("specifications", ""),
-                "description_spec": it.get("specifications", ""),
-                "quantity": float(it.get("quantity", 0)),
-                "unit": it.get("unit", "Pcs"),
-                "rate": float(it.get("rate", 0)),
-                "amount": float(it.get("amount", 0)),
-                "delivery_address": it.get("delivery_address", "").strip(),
-                "is_delivered": it.get("is_delivered", False)
-            })
-
-        supabase.table("job_items").delete().eq("job_id", jid).execute()
-        if new_rows:
-            supabase.table("job_items").insert(new_rows).execute()
+        # 2. Replace line items (delete old, insert new)
+        supabase.table("job_items").delete().eq("job_id", int(job_id)).execute()
+        for it in line_items:
+            it["job_id"] = int(job_id)
+        if line_items:
+            supabase.table("job_items").insert(line_items).execute()
 
         return True, "Jobsheet updated successfully."
     except Exception as e:
-        # Restore previous items if replace fails
-        if old_items:
-            try:
-                for o in old_items:
-                    o.pop("item_id", None)
-                supabase.table("job_items").insert(old_items).execute()
-            except Exception:
-                pass
         return False, str(e)
 
 def request_job_deletion(job_id, requested_by, reason):
+    """Marks a jobsheet with a deletion request pending CEO/Admin review."""
     try:
         supabase.table("jobs").update({
             "is_returned": True,
@@ -379,7 +350,9 @@ def request_job_deletion(job_id, requested_by, reason):
     except Exception as e:
         return False, str(e)
 
+
 def reject_job_deletion_request(job_id):
+    """Rejects the deletion request and restores normal job status."""
     try:
         supabase.table("jobs").update({
             "is_returned": False,
@@ -390,46 +363,65 @@ def reject_job_deletion_request(job_id):
         return False, str(e)
 
 def get_all_designers():
+    """Fetches ONLY active staff members who are designated designers (have MOD_B permission). Excludes Admin and CEO accounts."""
     try:
-        res = supabase.table("users").select("user_id, full_name, username, account_type, permissions").eq("is_active", True).execute()
+        res = (
+            supabase.table("users")
+            .select("user_id, full_name, username, account_type, permissions")
+            .eq("is_active", True)
+            .execute()
+        )
         users = res.data or []
+
         designers = []
         for u in users:
             perms = u.get("permissions") or []
             role = u.get("account_type", "")
             username = (u.get("username") or "").lower()
+
+            # Exclude root admin and CEO/Super Admin accounts
             if role in ["SUPER_ADMIN", "CEO"] or username in ["admin"]:
                 continue
+
+            # Must have Module 2 (Design Desk) assigned
             if "MOD_B" in perms:
                 designers.append(u)
+
         return designers
     except Exception:
         return []
 
-def claim_design_job(job_id, designer_name, user_id=None):
+
+def claim_design_job(job_id, designer_name):
+    """Allows a designer to claim an unassigned open pool job."""
     try:
-        supabase.table("jobs").update({"assigned_designer": designer_name}).eq("job_id", int(job_id)).execute()
-        log_audit(user_id, "DESIGN_CLAIMED", f"Job #{job_id} claimed by {designer_name}")
+        supabase.table("jobs").update({
+            "assigned_designer": designer_name
+        }).eq("job_id", int(job_id)).execute()
+        log_audit(0, "DESIGN_CLAIMED", f"Job #{job_id} claimed by designer {designer_name}")
         return True, "Job successfully claimed!"
     except Exception as e:
         return False, str(e)
 
-def reject_job_to_sales(job_id, designer_name, reason, user_id=None):
+def reject_job_to_sales(job_id, designer_name, reason):
+    """Flags a specification issue and routes the job back to Sales intake."""
     try:
         supabase.table("jobs").update({
-            "current_stage": "SALES",
+            "current_stage": "DESIGN",
             "is_returned": True,
             "returned_by": f"Designer ({designer_name})",
             "return_reason": f"[SPEC_ISSUE] {reason.strip()}"
         }).eq("job_id", int(job_id)).execute()
-        log_audit(user_id, "SPEC_ISSUE_FLAGGED", f"Job #{job_id} routed back to Sales: {reason.strip()}")
-        return True, "Flagged and routed back to Sales Desk."
+        log_audit(0, "SPEC_ISSUE_FLAGGED", f"Job #{job_id} flagged by {designer_name}: {reason.strip()}")
+        return True, "Spec issue flagged. Sales notified."
     except Exception as e:
         return False, str(e)
 
-def record_payment_and_release(job_id, user_name, advance_received, balance_remaining, payment_mode, ref_no, payment_date, notes, is_credit=False, user_id=None):
+def record_payment_and_release(job_id, user_name, advance_received, balance_remaining, payment_mode, ref_no, payment_date, notes, is_credit=False):
+    """Records advance/credit terms and releases job to PRODUCTION stage."""
     try:
         payment_status = "CREDIT_APPROVED" if is_credit else ("CLEARED" if balance_remaining <= 0 else "PARTIAL_ADVANCE")
+        
         payload = {
             "current_stage": "PRODUCTION",
             "advance_received": float(advance_received),
@@ -443,24 +435,26 @@ def record_payment_and_release(job_id, user_name, advance_received, balance_rema
             "is_returned": False,
             "return_reason": None
         }
+        
         supabase.table("jobs").update(payload).eq("job_id", int(job_id)).execute()
-        audit_note = f"Released to PRODUCTION (Credit) by {user_name}" if is_credit else f"Advance ₹{advance_received:,.2f} recorded via {payment_mode}. Balance: ₹{balance_remaining:,.2f}"
-        log_audit(user_id, "PAYMENT_CLEARED", f"Job #{job_id}: {audit_note}")
+        
+        audit_note = f"Released to PRODUCTION on Credit terms by {user_name}" if is_credit else f"Advance ₹{advance_received:,.2f} recorded via {payment_mode}. Balance: ₹{balance_remaining:,.2f} by {user_name}"
+        log_audit(0, "PAYMENT_CLEARED", f"Job #{job_id}: {audit_note}")
+        
         return True, "Payment recorded. Job released to Production Floor!"
     except Exception as e:
         return False, str(e)
 
 @st.cache_data(ttl=15, show_spinner=False)
 def get_station_pending_counts():
+    """Counts pending active jobs with a 15-second cache to prevent memory bloat."""
     counts = {
-        "SALES": 0,
         "DESIGN": 0,
         "PAYMENT": 0,
         "PRODUCTION": 0,
         "QC": 0,
         "DISPATCH": 0,
         "BILLING": 0,
-        "BILLING_QUEUE": 0,
         "DELETION_REQS": 0,
     }
     try:
@@ -468,21 +462,22 @@ def get_station_pending_counts():
             supabase.table("jobs")
             .select("current_stage, return_reason")
             .neq("current_stage", "SETTLED")
+            .limit(200)
             .execute()
         )
-        for j in (res.data or []):
+        jobs = res.data or []
+        for j in jobs:
             stg = j.get("current_stage")
             if (j.get("return_reason") or "").startswith("[DELETION_REQ]"):
                 counts["DELETION_REQS"] += 1
-            if stg in ["BILLING_REVIEW", "BILLING"]:
-                counts["BILLING"] += 1
-            elif stg in counts:
+            if stg in counts:
                 counts[stg] += 1
     except Exception:
         pass
     return counts
 
 def get_custom_presets(preset_type: str) -> list:
+    """Fetch all saved custom presets for dynamic dropdowns."""
     try:
         res = supabase.table("custom_presets").select("preset_name").eq("preset_type", preset_type).execute()
         return [r["preset_name"] for r in (res.data or []) if r.get("preset_name")]
@@ -490,6 +485,7 @@ def get_custom_presets(preset_type: str) -> list:
         return []
 
 def add_custom_preset(preset_type: str, preset_name: str) -> bool:
+    """Inserts a new item/job/fabrication name so it appears in future dropdowns."""
     p_clean = preset_name.strip()
     if not p_clean or p_clean.upper() == "NEW":
         return False
@@ -502,9 +498,8 @@ def add_custom_preset(preset_type: str, preset_name: str) -> bool:
     except Exception:
         return False
 
-import uuid
 
-# --- DISPATCH STORAGE UPLOAD ---
+import uuid
 
 def upload_dispatch_file(uploaded_file, folder_name: str) -> str:
     """Uploads an in-memory file to Supabase Storage and returns its public URL."""
@@ -516,21 +511,20 @@ def upload_dispatch_file(uploaded_file, folder_name: str) -> str:
         file_bytes = uploaded_file.getvalue()
 
         # Upload to Supabase Storage bucket 'dispatch-media'
-        supabase.storage.from_("dispatch-media").upload(
+        res = supabase.storage.from_("dispatch-media").upload(
             file_name,
             file_bytes,
             {"content-type": uploaded_file.type}
         )
 
-        return supabase.storage.from_("dispatch-media").get_public_url(file_name)
+        # Retrieve public URL
+        public_url = supabase.storage.from_("dispatch-media").get_public_url(file_name)
+        return public_url
     except Exception as e:
         print(f"Error uploading file: {e}")
         return None
 
-
-# --- WORKFLOW FORWARDING & BULK ACTIONS ---
-
-def approve_and_forward_job(job_id: int, user_full_name: str, target_stage: str = None, user_id=None) -> tuple[bool, str, str]:
+def approve_and_forward_job(job_id: int, user_full_name: str, target_stage: str = None) -> tuple[bool, str, str]:
     """
     Approves and routes a job forward based on workflow stage hierarchy:
     DESIGN -> PAYMENT -> PRODUCTION -> QC -> DISPATCH -> BILLING_REVIEW -> SETTLED
@@ -563,23 +557,19 @@ def approve_and_forward_job(job_id: int, user_full_name: str, target_stage: str 
             else:
                 next_stage = "DESIGN"
 
-        update_payload = {
+        supabase.table("jobs").update({
             "current_stage": next_stage,
             "is_returned": False,
             "return_reason": None,
-        }
-        if next_stage == "PRODUCTION":
-            update_payload["accounts_cleared_by"] = user_full_name
+            "accounts_cleared_by": user_full_name if next_stage == "PRODUCTION" else None
+        }).eq("job_id", int(job_id)).execute()
 
-        supabase.table("jobs").update(update_payload).eq("job_id", int(job_id)).execute()
-
-        log_audit(user_id, "STAGE_FORWARDED", f"Job #{job_num} approved by {user_full_name} and routed to {next_stage}")
+        log_audit(0, "STAGE_FORWARDED", f"Job #{job_num} approved by {user_full_name} and routed to {next_stage}")
         return True, f"Approved and sent to {next_stage}", next_stage
     except Exception as e:
         return False, str(e), ""
 
-
-def bulk_approve_design_jobs(job_ids: list, user_name: str, user_id=None) -> tuple[bool, str]:
+def bulk_approve_design_jobs(job_ids: list, user_name: str) -> tuple[bool, str]:
     """Approves multiple design jobs and forwards them to PAYMENT (Accounts Clearance)."""
     try:
         payload = {
@@ -590,13 +580,13 @@ def bulk_approve_design_jobs(job_ids: list, user_name: str, user_id=None) -> tup
         }
         for jid in job_ids:
             supabase.table("jobs").update(payload).eq("job_id", int(jid)).execute()
-            log_audit(user_id, "DESIGN_APPROVED", f"Job #{jid} approved by {user_name} and routed to PAYMENT")
+            log_audit(0, "DESIGN_APPROVED", f"Job #{jid} approved by {user_name} and routed to PAYMENT")
         return True, f"{len(job_ids)} job(s) approved and sent to Accounts Clearance."
     except Exception as e:
         return False, str(e)
 
 
-def bulk_reject_design_jobs(job_ids: list, user_name: str, reason: str, user_id=None) -> tuple[bool, str]:
+def bulk_reject_design_jobs(job_ids: list, user_name: str, reason: str) -> tuple[bool, str]:
     """Flags multiple design jobs with spec discrepancies and returns them to SALES."""
     try:
         payload = {
@@ -607,7 +597,7 @@ def bulk_reject_design_jobs(job_ids: list, user_name: str, reason: str, user_id=
         }
         for jid in job_ids:
             supabase.table("jobs").update(payload).eq("job_id", int(jid)).execute()
-            log_audit(user_id, "SPEC_ISSUE_FLAGGED", f"Job #{jid} flagged by {user_name}: {reason.strip()}")
+            log_audit(0, "SPEC_ISSUE_FLAGGED", f"Job #{jid} flagged by {user_name}: {reason.strip()}")
         return True, f"{len(job_ids)} job(s) returned to Sales."
     except Exception as e:
         return False, str(e)
