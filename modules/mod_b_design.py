@@ -44,7 +44,7 @@ def show_jobsheet_spec_modal(job):
                 if it.get("delivery_address"):
                     st.caption(f"Destination: {it.get('delivery_address')}")
 
-    st.markdown("---")
+    # st.markdown("---")
     # st.caption("Commercial rates, item values, and order amounts are masked for Pre-Press & Design.")
 
 
