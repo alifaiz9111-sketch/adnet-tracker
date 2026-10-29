@@ -458,8 +458,7 @@ def render(user):
                     for it in st.session_state.sales_items:
                         size_str = f"Size: {it.get('length', 1.0)} x {it.get('breadth', 1.0)} x {it.get('height', 1.0)} {it.get('dim_unit', 'Inch')}"
                         full_spec = it.get("specifications", "").strip()
-                        if size_str:
-                            full_spec = f"{size_str} | {full_spec}" if full_spec else size_str
+                        full_spec = f"{size_str} | {full_spec}" if full_spec else size_str
 
                     prepared_items.append({
                         "item_name": it["item_name"].strip(),
