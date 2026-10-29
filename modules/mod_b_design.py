@@ -45,7 +45,7 @@ def show_jobsheet_spec_modal(job):
                     st.caption(f"Destination: {it.get('delivery_address')}")
 
     st.markdown("---")
-    st.caption("Commercial rates, item values, and order amounts are masked for Pre-Press & Design.")
+    # st.caption("Commercial rates, item values, and order amounts are masked for Pre-Press & Design.")
 
 
 def render(user):
