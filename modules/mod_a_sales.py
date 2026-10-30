@@ -231,18 +231,19 @@ def render(user):
                     ).strip()
                 with r2_c2:
                     due_date = st.date_input(
-                        "Target Delivery Date *",
+                        "Target Date *",
                         min_value=date.today(),
                         key="s_due"
                     )
                 with r2_c3:
                     routed_desk = st.selectbox(
-                        "Routing Workflow Target *",
-                        options=["DESIGN", "PAYMENT", "PRODUCTION"],
+                        "Target Floor*",
+                        options=["DESIGN", "PAYMENT", "PRODUCTION", "DISPATCH"],
                         format_func=lambda x: {
-                            "DESIGN": "Send to Design & Proofs",
-                            "PAYMENT": "Direct to Accounts / Advance",
-                            "PRODUCTION": "Skip to Production Floor",
+                            "DESIGN": "Design Floor",
+                            "PAYMENT": "Accounts Floor",
+                            "PRODUCTION": "Production Floor",
+                            "DISPATCH": "Dispatch Floor",
                         }.get(x, x),
                         key="s_route",
                     )
