@@ -986,3 +986,31 @@ def render(user):
                             if st.button("Save Changes", key=f"btn_save_edit_{jid}", type="primary", use_container_width=True):
                                 if not ed_client:
                                     st.error("Client name is required.")
+                                else:
+                                    # (Existing save logic...)
+                                    pass
+
+            # ------------------------------------------------------------------
+            # PASTE PAGINATION CONTROLS HERE (Aligned with "for j in page_records:")
+            # ------------------------------------------------------------------
+            if total_pages > 1:
+                st.markdown("<br>", unsafe_allow_html=True)
+                p_c1, p_c2, p_c3, p_c4, p_c5 = st.columns([2, 1, 2, 1, 2])
+
+                with p_c2:
+                    if st.button("◀ Previous", disabled=(curr_page <= 1), use_container_width=True, key="sales_pg_prev"):
+                        st.session_state.sales_page_num = max(1, curr_page - 1)
+                        st.rerun()
+
+                with p_c3:
+                    st.markdown(
+                        f"<div style='text-align: center; padding-top: 6px; font-size: 14px; font-weight: 600; color: #475569;'>"
+                        f"Page {curr_page} of {total_pages}"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
+
+                with p_c4:
+                    if st.button("Next ▶", disabled=(curr_page >= total_pages), use_container_width=True, key="sales_pg_next"):
+                        st.session_state.sales_page_num = min(total_pages, curr_page + 1)
+                        st.rerun()
