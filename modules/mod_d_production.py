@@ -499,7 +499,7 @@ def render(user):
                 t_jid = target_job["job_id"]
                 t_jno = target_job.get("job_no", str(t_jid))
                 choice = st.session_state.get(f"act_prod_{t_jid}")
-                if choice == "✅ Production Completed (Send to QC)":
+                if choice == "Completed":
                     st.session_state["view_prod_job_id"] = None
                     try:
                         supabase.table("jobs").update({
@@ -510,7 +510,7 @@ def render(user):
                         st.session_state["prod_toast_msg"] = f"Job #{t_jno} forwarded to QC Desk."
                     except Exception as e:
                         st.session_state["prod_err_msg"] = f"Failed to update status: {e}"
-                elif choice == "⚠️ Return / Flag Job":
+                elif choice == "Return Job":
                     st.session_state["view_prod_job_id"] = None
                     # Opens details modal to let operator select return station & explanation
                     st.session_state["view_prod_job_id"] = t_jid
