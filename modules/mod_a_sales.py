@@ -105,9 +105,8 @@ _UNIFORM_MODULE_CSS = """
         margin: auto;
     }
 
-    /* Flat clickable text styling in History Table */
-    div[data-testid="stHorizontalBlock"] button[kind="tertiary"],
-    div[data-testid="stHorizontalBlock"] button[kind="secondary"] {
+    /* Flat clickable text styling in History Table (tertiary only) */
+    div[data-testid="stHorizontalBlock"] button[kind="tertiary"] {
         border: none !important;
         background: transparent !important;
         box-shadow: none !important;
@@ -484,6 +483,11 @@ def _show_sales_edit_modal(j, user):
 
 def render(user):
     st.markdown(_UNIFORM_MODULE_CSS, unsafe_allow_html=True)
+    def _clear_edit_widget_state(jid):
+    prefixes = (f"ed_", f"ei_")
+    for k in list(st.session_state.keys()):
+        if k.startswith(prefixes) and f"_{jid}" in k:
+            del st.session_state[k]
     st.subheader("Module 1: Order Intake & Commercial Jobsheet Creation")
     st.caption(
         f"Sales Representative: **{user['full_name']}** | Code: `{user.get('emp_code', 'N/A')}` | Role: `{user.get('account_type')}`"
@@ -796,8 +800,6 @@ def render(user):
         def _submit_delete_request_to_admin(job_obj):
             jid_val = job_obj["job_id"]
             jno_val = job_obj.get("job_no", str(jid_val))
-            # Hide immediately from current user's list without hard-deleting from DB
-            st.session_state["sales_pending_delete_ids"].add(jid_val)
             try:
                 from database import supabase
                 supabase.table("jobs").update({
@@ -805,13 +807,17 @@ def render(user):
                     "returned_by": f"{user['full_name']} (Delete Request)",
                     "return_reason": f"DELETE_REQUEST: Sales requested deletion of Job #{jno_val} — awaiting Admin/CEO approval."
                 }).eq("job_id", int(jid_val)).execute()
-            except Exception:
-                pass
-            log_audit(
-                user["user_id"],
-                "DELETE_REQUEST_ADMIN_CEO",
-                f"Sales rep {user['full_name']} requested deletion of Job #{jno_val} (ID: {jid_val}) for Admin/CEO approval"
-            )
+
+                st.session_state["sales_pending_delete_ids"].add(jid_val)
+                log_audit(
+                    user["user_id"],
+                    "DELETE_REQUEST_ADMIN_CEO",
+                    f"Sales rep {user['full_name']} requested deletion of Job #{jno_val} (ID: {jid_val}) for Admin/CEO approval"
+                )
+                return True
+            except Exception as e:
+                st.error(f"Failed to submit delete request for JOB-{jno_val}: {e}")
+                return False
 
         floor_names = {
             "DESIGN": "Design Desk",
