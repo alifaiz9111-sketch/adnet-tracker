@@ -483,11 +483,7 @@ def _show_sales_edit_modal(j, user):
 
 def render(user):
     st.markdown(_UNIFORM_MODULE_CSS, unsafe_allow_html=True)
-    def _clear_edit_widget_state(jid):
-    prefixes = (f"ed_", f"ei_")
-    for k in list(st.session_state.keys()):
-        if k.startswith(prefixes) and f"_{jid}" in k:
-            del st.session_state[k]
+    
     st.subheader("Module 1: Order Intake & Commercial Jobsheet Creation")
     st.caption(
         f"Sales Representative: **{user['full_name']}** | Code: `{user.get('emp_code', 'N/A')}` | Role: `{user.get('account_type')}`"
