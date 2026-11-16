@@ -3,8 +3,10 @@ import pandas as pd
 from datetime import date
 from database import supabase, get_job_items, log_audit
 
+# ALI Theme: Unified Font, Size & Color across Main View and All Dialogs
 _UNIFORM_MODULE_CSS = """
     <style>
+    /* Base uniform typography for main view and modals */
     div[data-testid="stAppViewContainer"] .main p,
     div[data-testid="stAppViewContainer"] .main span,
     div[data-testid="stAppViewContainer"] .main label,
@@ -30,6 +32,7 @@ _UNIFORM_MODULE_CSS = """
         color: #1e293b !important;
     }
 
+    /* Unified Section & Dialog Subheaders */
     div[data-testid="stAppViewContainer"] .main h3,
     div[data-testid="stAppViewContainer"] .main h4,
     div[data-testid="stAppViewContainer"] .main h5,
@@ -42,6 +45,7 @@ _UNIFORM_MODULE_CSS = """
         color: #1e293b !important;
     }
 
+    /* Keep primary action buttons readable */
     div[data-testid="stAppViewContainer"] .main button[kind="primary"] p,
     div[data-testid="stAppViewContainer"] .main button[kind="primary"] span,
     div[data-testid="stDialog"] button[kind="primary"] p,
@@ -51,6 +55,7 @@ _UNIFORM_MODULE_CSS = """
         font-weight: 600 !important;
     }
 
+    /* Table Header & Cell Styles */
     .tbl-cell-header {
         font-size: 13px !important;
         font-family: inherit !important;
@@ -60,6 +65,7 @@ _UNIFORM_MODULE_CSS = """
         text-transform: uppercase;
     }
 
+    /* Checkbox & Dropdown Vertical Alignment inside 38px rows */
     div[data-testid="stCheckbox"] {
         display: flex;
         align-items: center;
@@ -75,6 +81,7 @@ _UNIFORM_MODULE_CSS = """
         margin-bottom: 0 !important;
     }
 
+    /* Flat clickable text styling in Table (tertiary only, preserves secondary button borders) */
     div[data-testid="stHorizontalBlock"] button[kind="tertiary"] {
         border: none !important;
         background: transparent !important;
@@ -220,6 +227,10 @@ def render(user):
             m1.metric("Pending GST B2B Invoices", f"{total_gst_orders}")
             m2.metric("Total Taxable Value", f"₹ {total_taxable_turnover:,.2f}")
             m3.metric("Est. Total GST (18% avg)", f"₹ {(total_taxable_turnover * 0.18):,.2f}")
+
+        # Initialize safe pagination defaults
+        total_pages = 1
+        curr_page = 1
 
         if not pending_jobs:
             st.info("No pending GST records found for audit.")
