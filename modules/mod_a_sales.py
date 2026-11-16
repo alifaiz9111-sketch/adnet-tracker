@@ -93,7 +93,7 @@ def _sync_edit_commercials(jid, idx, trigger_field, def_l=1.0, def_b=1.0, def_h=
 # =========================================================
 # DIALOGS: VIEW JOB DETAILS & EDIT JOBSHEET
 # =========================================================
-@st.dialog("Jobsheet Details", width="large")
+@st.dialog("Jobsheet Details")
 def _show_sales_job_details_modal(job, floor_names):
     jid = job["job_id"]
     job_no = job.get("job_no", str(jid))
@@ -150,7 +150,7 @@ def _show_sales_job_details_modal(job, floor_names):
         st.rerun()
 
 
-@st.dialog("Edit Jobsheet", width="large")
+@st.dialog("Edit Jobsheet")
 def _show_sales_edit_modal(j, user):
     jid = j["job_id"]
     job_no = j.get("job_no", str(jid))
