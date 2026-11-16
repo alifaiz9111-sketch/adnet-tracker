@@ -3,10 +3,8 @@ import pandas as pd
 from datetime import date
 from database import supabase, get_job_items, log_audit
 
-# ALI Theme: Unified Font, Size & Color across Main View and All Dialogs
 _UNIFORM_MODULE_CSS = """
     <style>
-    /* Base uniform typography for main view and modals */
     div[data-testid="stAppViewContainer"] .main p,
     div[data-testid="stAppViewContainer"] .main span,
     div[data-testid="stAppViewContainer"] .main label,
@@ -32,7 +30,6 @@ _UNIFORM_MODULE_CSS = """
         color: #1e293b !important;
     }
 
-    /* Unified Section & Dialog Subheaders */
     div[data-testid="stAppViewContainer"] .main h3,
     div[data-testid="stAppViewContainer"] .main h4,
     div[data-testid="stAppViewContainer"] .main h5,
@@ -45,7 +42,6 @@ _UNIFORM_MODULE_CSS = """
         color: #1e293b !important;
     }
 
-    /* Keep primary action buttons readable */
     div[data-testid="stAppViewContainer"] .main button[kind="primary"] p,
     div[data-testid="stAppViewContainer"] .main button[kind="primary"] span,
     div[data-testid="stDialog"] button[kind="primary"] p,
@@ -55,7 +51,6 @@ _UNIFORM_MODULE_CSS = """
         font-weight: 600 !important;
     }
 
-    /* Table Header & Cell Styles */
     .tbl-cell-header {
         font-size: 13px !important;
         font-family: inherit !important;
@@ -65,7 +60,6 @@ _UNIFORM_MODULE_CSS = """
         text-transform: uppercase;
     }
 
-    /* Checkbox & Dropdown Vertical Alignment inside 38px rows */
     div[data-testid="stCheckbox"] {
         display: flex;
         align-items: center;
@@ -81,7 +75,6 @@ _UNIFORM_MODULE_CSS = """
         margin-bottom: 0 !important;
     }
 
-    /* Flat clickable text styling in Table (tertiary only, preserves secondary button borders) */
     div[data-testid="stHorizontalBlock"] button[kind="tertiary"] {
         border: none !important;
         background: transparent !important;
@@ -127,7 +120,6 @@ def _reset_ca_filters():
 
 @st.dialog("CA Audit & GST Verification")
 def show_ca_details_modal(job, items):
-    """Full professional audit and GST verification sheet opened upon row selection."""
     st.markdown(_UNIFORM_MODULE_CSS, unsafe_allow_html=True)
     jid = job["job_id"]
     job_no = job.get("job_no", str(jid))
@@ -198,7 +190,6 @@ def render(user):
         f"Auditor / CA View | User: **{user['full_name']}** | Role: `{user.get('account_type')}`"
     )
 
-    # 1. Fetch only GST Jobs
     try:
         res = (
             supabase.table("jobs")
@@ -218,7 +209,6 @@ def render(user):
     with tab_pending:
         pending_jobs = [j for j in gst_jobs if not j.get("is_billed")]
 
-        # --- TOP METRICS BAR ---
         total_gst_orders = len(pending_jobs)
         total_taxable_turnover = sum(
             sum(float(it.get("amount", 0) or 0) for it in get_job_items(j["job_id"]))
@@ -234,7 +224,6 @@ def render(user):
         if not pending_jobs:
             st.info("No pending GST records found for audit.")
         else:
-            # --- SEARCH & DATE FILTER BAR ---
             with st.container(border=True):
                 st.markdown("##### Audit Filter & Search")
                 fc1, fc2, fc3 = st.columns(3)
@@ -260,7 +249,6 @@ def render(user):
                         on_change=_clear_active_modals,
                     )
 
-            # Filter application
             filtered = []
             for j in pending_jobs:
                 if q_gstin and q_gstin not in str(j.get("gstin") or "").upper():
@@ -271,19 +259,15 @@ def render(user):
                     continue
                 filtered.append(j)
 
-            # --- EXPORT TO EXCEL / CSV BUTTON FOR CA FILING ---
             export_rows = []
             for j in filtered:
                 items = get_job_items(j["job_id"])
                 taxable_amt = sum(float(it.get("amount", 0) or 0) for it in items)
-                
                 pos = str(j.get("place_of_supply") or "19 - West Bengal")
                 is_interstate = not pos.startswith("19")
-                
                 gst_rate = 18.0
                 tax_amt = round(taxable_amt * (gst_rate / 100.0), 2)
                 total_inv = taxable_amt + tax_amt
-
                 ship_to = items[0].get("delivery_address") if items and items[0].get("delivery_address") else j.get("billing_address")
 
                 export_rows.append({
@@ -317,7 +301,6 @@ def render(user):
 
             st.markdown("---")
 
-            # --- PAGINATION LOGIC (15 ROWS PER PAGE) ---
             ROWS_PER_PAGE = 15
             total_records = len(filtered)
             total_pages = max(1, (total_records + ROWS_PER_PAGE - 1) // ROWS_PER_PAGE)
@@ -332,13 +315,11 @@ def render(user):
             end_idx = min(start_idx + ROWS_PER_PAGE, total_records)
             page_records = filtered[start_idx:end_idx]
 
-            # Selected rows on active page
             selected_ca_ids = [
                 j["job_id"] for j in page_records
                 if st.session_state.get(f"ca_chk_{j['job_id']}", False)
             ]
 
-            # --- BULK ACTION BAR & COUNTER ---
             bar_col1, bar_col2 = st.columns([5, 5])
             with bar_col1:
                 st.caption(f"Showing **{start_idx + 1 if total_records else 0} to {end_idx}** of **{total_records}** pending GST record(s)")
@@ -362,7 +343,6 @@ def render(user):
             if not page_records:
                 st.info("No matching GST records found.")
             else:
-                # --- TABLE HEADER ---
                 st.markdown("""
                     <div class="adnet-table-header" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px;">
                         <div style="display: grid; grid-template-columns: 0.4fr 1.1fr 1fr 1.8fr 1.8fr 1.4fr 1.3fr 1.4fr; align-items: center; gap: 8px;">
@@ -381,7 +361,6 @@ def render(user):
                 def _open_ca_modal(target_jid):
                     st.session_state["view_ca_job_id"] = target_jid
 
-                # --- TABLE ROWS ---
                 for j in page_records:
                     jid = j["job_id"]
                     job_no = j.get("job_no", str(jid))
@@ -466,7 +445,6 @@ def render(user):
                         )
 
                     with r_act:
-                        # Upload Popover replacing Action Dropdown
                         with st.popover("Upload Audit Files", use_container_width=True):
                             st.markdown(f"**Upload Audit Documents for JOB-{job_no}**")
                             uploaded_files = st.file_uploader(
@@ -487,7 +465,6 @@ def render(user):
 
                     st.markdown("<hr style='margin: 4px 0 8px 0; border: none; border-top: 1px solid #edf2f7;' />", unsafe_allow_html=True)
 
-        # Modal trigger when row is clicked
         view_ca_jid = st.session_state.get("view_ca_job_id")
         if view_ca_jid:
             job_match = next((j for j in filtered if j["job_id"] == view_ca_jid), None)
@@ -495,7 +472,6 @@ def render(user):
                 job_match_items = get_job_items(view_ca_jid) or []
                 show_ca_details_modal(job_match, job_match_items)
 
-        # --- PAGINATION CONTROLS AT BOTTOM ---
         if total_pages > 1:
             st.markdown("<br>", unsafe_allow_html=True)
             p_c1, p_c2, p_c3, p_c4, p_c5 = st.columns([2, 1, 2, 1, 2])
@@ -568,11 +544,11 @@ def render(user):
                 with r_date:
                     st.button(created_date, key=f"cac_dt_{jid}", type="tertiary", on_click=_open_ca_comp_modal, args=(jid,))
                 with r_client:
-                    st.button(client_name, key=f"cac_cl_{jid}", type="tertiary", on_click=_open_ca_comp_modal, args=(jid,))
+                    st.button(client_name, key=f"cac_cl_{jid}", type="tertiary", help=client_name, on_click=_open_ca_comp_modal, args=(jid,))
                 with r_gstin:
-                    st.button(gstin_val, key=f"cac_gst_{jid}", type="tertiary", on_click=_open_ca_comp_modal, args=(jid,))
+                    st.button(gstin_val, key=f"cac_gst_{jid}", type="tertiary", help=gstin_val, on_click=_open_ca_comp_modal, args=(jid,))
                 with r_pos:
-                    st.button(pos_val, key=f"cac_pos_{jid}", type="tertiary", on_click=_open_ca_comp_modal, args=(jid,))
+                    st.button(pos_val, key=f"cac_pos_{jid}", type="tertiary", help=pos_val, on_click=_open_ca_comp_modal, args=(jid,))
                 with r_val:
                     st.button(val_label, key=f"cac_val_{jid}", type="tertiary", on_click=_open_ca_comp_modal, args=(jid,))
                 with r_act:
@@ -580,7 +556,6 @@ def render(user):
 
                 st.markdown("<hr style='margin: 4px 0 8px 0; border: none; border-top: 1px solid #edf2f7;' />", unsafe_allow_html=True)
 
-        # Modal trigger for completed tab
         view_ca_jid_c = st.session_state.get("view_ca_job_id")
         if view_ca_jid_c:
             job_match_c = next((j for j in completed_jobs if j["job_id"] == view_ca_jid_c), None)
