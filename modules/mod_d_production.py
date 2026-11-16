@@ -9,21 +9,136 @@ from database import (
     log_audit
 )
 
+# ALI Theme: Unified Font, Size & Color across Main View and All Dialogs
+_UNIFORM_MODULE_CSS = """
+    <style>
+    /* Base uniform typography for main view and modals */
+    div[data-testid="stAppViewContainer"] .main p,
+    div[data-testid="stAppViewContainer"] .main span,
+    div[data-testid="stAppViewContainer"] .main label,
+    div[data-testid="stAppViewContainer"] .main input,
+    div[data-testid="stAppViewContainer"] .main textarea,
+    div[data-testid="stAppViewContainer"] .main select,
+    div[data-testid="stAppViewContainer"] .main div[data-testid="stCaptionContainer"] p,
+    div[data-testid="stAppViewContainer"] .main div[data-testid="stMarkdownContainer"] p,
+    div[data-testid="stAppViewContainer"] .main div[data-baseweb="select"] div,
+    div[data-testid="stAppViewContainer"] .main div[data-baseweb="input"] input,
+    div[data-testid="stDialog"] p,
+    div[data-testid="stDialog"] span,
+    div[data-testid="stDialog"] label,
+    div[data-testid="stDialog"] input,
+    div[data-testid="stDialog"] textarea,
+    div[data-testid="stDialog"] select,
+    div[data-testid="stDialog"] div[data-testid="stCaptionContainer"] p,
+    div[data-testid="stDialog"] div[data-testid="stMarkdownContainer"] p,
+    div[data-testid="stDialog"] div[data-baseweb="select"] div,
+    div[data-testid="stDialog"] div[data-baseweb="input"] input {
+        font-family: inherit !important;
+        font-size: 13px !important;
+        color: #1e293b !important;
+    }
+
+    /* Unified Section & Dialog Subheaders */
+    div[data-testid="stAppViewContainer"] .main h3,
+    div[data-testid="stAppViewContainer"] .main h4,
+    div[data-testid="stAppViewContainer"] .main h5,
+    div[data-testid="stDialog"] h3,
+    div[data-testid="stDialog"] h4,
+    div[data-testid="stDialog"] h5 {
+        font-family: inherit !important;
+        font-size: 15px !important;
+        font-weight: 700 !important;
+        color: #1e293b !important;
+    }
+
+    /* Keep primary action buttons readable */
+    div[data-testid="stAppViewContainer"] .main button[kind="primary"] p,
+    div[data-testid="stAppViewContainer"] .main button[kind="primary"] span,
+    div[data-testid="stDialog"] button[kind="primary"] p,
+    div[data-testid="stDialog"] button[kind="primary"] span {
+        color: #ffffff !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+    }
+
+    /* Table Header & Cell Styles */
+    .tbl-cell-header {
+        font-size: 13px !important;
+        font-family: inherit !important;
+        font-weight: 700 !important;
+        color: #1e293b !important;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+    }
+
+    /* Checkbox & Dropdown Vertical Alignment inside 38px rows */
+    div[data-testid="stCheckbox"] {
+        display: flex;
+        align-items: center;
+        height: 38px;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    div[data-testid="stCheckbox"] label {
+        margin-bottom: 0 !important;
+    }
+    div[data-testid="stSelectbox"] {
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+    }
+
+    /* Flat clickable text styling in Table (tertiary only, preserves secondary button borders) */
+    div[data-testid="stHorizontalBlock"] button[kind="tertiary"] {
+        border: none !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        padding: 6px 0 !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        font-family: inherit !important;
+        color: #1e293b !important;
+        text-align: left !important;
+        justify-content: flex-start !important;
+        align-items: center !important;
+        display: flex !important;
+        height: 38px !important;
+        min-height: 38px !important;
+        max-height: 38px !important;
+        width: 100% !important;
+        line-height: 1.4 !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+    div[data-testid="stHorizontalBlock"] button[kind="tertiary"]:hover {
+        color: #E11D48 !important;
+        text-decoration: underline !important;
+        background: transparent !important;
+    }
+    </style>
+"""
+
+
+def _clear_active_modals():
+    st.session_state["view_prod_job_id"] = None
+
 
 def _reset_production_filters():
+    _clear_active_modals()
     st.session_state["prod_search_kw"] = ""
     st.session_state["prod_sort_filter"] = "Recent Jobs (Newest First)"
     st.session_state["prod_page_num"] = 1
 
 
-@st.dialog("Job Sheet & Production Details", width="large")
+@st.dialog("Job Sheet & Production Details")
 def show_job_details_modal(job, items, vendors, user):
-    """Full detail view opened when clicking on any job number."""
+    """Full detail view opened when clicking on any job number (ALI Theme compact dialog)."""
+    st.markdown(_UNIFORM_MODULE_CSS, unsafe_allow_html=True)
     jid = job["job_id"]
     job_no = job.get("job_no", str(jid))
     total_val = sum(float(it.get("amount", 0) or 0) for it in items)
 
-    st.markdown(f"### ⚙️ Production Sheet: #{job_no}")
+    st.markdown(f"### Production Sheet: #{job_no}")
     st.caption(
         f"**Client:** {job.get('client_name')} | "
         f"**Contact:** {job.get('contact_person') or 'N/A'} ({job.get('contact_phone') or 'N/A'}) | "
@@ -31,7 +146,7 @@ def show_job_details_modal(job, items, vendors, user):
     )
 
     if job.get("is_returned"):
-        st.error(f"⚠️ Return Notice from {job.get('returned_by')}: {job.get('return_reason')}")
+        st.error(f"Return Notice from {job.get('returned_by')}: {job.get('return_reason')}")
 
     p_tab1, p_tab2, p_tab3 = st.tabs(["📦 Items & Specs", "🏭 Vendor Job-Work", "📄 Paper Fabrications"])
 
@@ -43,9 +158,9 @@ def show_job_details_modal(job, items, vendors, user):
                 f"@ ₹{float(it.get('rate', 0)):,.2f}"
             )
             if it.get("specifications"):
-                st.caption(f"⚙️ **Specs / Size:** {it.get('specifications')}")
+                st.caption(f"**Specs / Size:** {it.get('specifications')}")
             if it.get("delivery_address"):
-                st.caption(f"📍 **Delivery:** {it.get('delivery_address')}")
+                st.caption(f"**Delivery:** {it.get('delivery_address')}")
 
     with p_tab2:
         st.markdown("##### Outsource Job-Work Details")
@@ -108,13 +223,20 @@ def show_job_details_modal(job, items, vendors, user):
         st.number_input("Quantity", min_value=1, value=1, step=1, key=f"dlg_fq_{jid}")
 
     st.markdown("---")
-    if st.button("Close View", use_container_width=True):
+    if st.button("Close View", use_container_width=True, key=f"cls_prod_modal_{jid}"):
         st.session_state["view_prod_job_id"] = None
         st.rerun()
 
 
 def render(user):
-    st.subheader("⚙️ Module 4: Production Floor & Fabrication Desk")
+    st.markdown(_UNIFORM_MODULE_CSS, unsafe_allow_html=True)
+
+    if st.session_state.get("prod_toast_msg"):
+        st.toast(st.session_state.pop("prod_toast_msg"))
+    if st.session_state.get("prod_err_msg"):
+        st.error(st.session_state.pop("prod_err_msg"))
+
+    st.subheader("Module 4: Production Floor & Fabrication Desk")
     st.caption(
         f"Floor Supervisor / Operator: **{user['full_name']}** | "
         f"Station: `{user.get('primary_station') or 'Floor General'}` | Role: `{user.get('account_type')}`"
@@ -143,13 +265,15 @@ def render(user):
             search_kw = st.text_input(
                 "Search Orders",
                 placeholder="Search Job No, Client, Contact Phone...",
-                key="prod_search_kw"
+                key="prod_search_kw",
+                on_change=_clear_active_modals,
             ).strip().lower()
         with f2:
             sort_order = st.selectbox(
                 "Sort By",
                 options=["Recent Jobs (Newest First)", "Oldest Jobs", "Delivery Due Soonest"],
-                key="prod_sort_filter"
+                key="prod_sort_filter",
+                on_change=_clear_active_modals,
             )
         with f3:
             st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
@@ -209,9 +333,10 @@ def render(user):
         if selected_job_ids:
             b_act1, b_act2 = st.columns(2)
             with b_act1:
-                with st.popover(f"✅ Bulk Complete ({len(selected_job_ids)})", use_container_width=True):
+                with st.popover(f"Bulk Complete ({len(selected_job_ids)})", use_container_width=True):
                     st.success(f"Forward all {len(selected_job_ids)} selected job(s) directly to the QC Desk?")
                     if st.button("Confirm Bulk QC Forward", key="btn_bulk_qc_confirm", type="primary", use_container_width=True):
+                        _clear_active_modals()
                         try:
                             for bid in selected_job_ids:
                                 supabase.table("jobs").update({
@@ -221,21 +346,21 @@ def render(user):
                                 if f"prod_chk_{bid}" in st.session_state:
                                     del st.session_state[f"prod_chk_{bid}"]
                             log_audit(user["user_id"], "BULK_PRODUCTION_COMPLETED", f"Completed jobs: {selected_job_ids}")
-                            st.success(f"{len(selected_job_ids)} job(s) moved to QC Desk.")
+                            st.session_state["prod_toast_msg"] = f"{len(selected_job_ids)} job(s) moved to QC Desk."
                             st.rerun()
                         except Exception as e:
                             st.error(f"Bulk complete failed: {e}")
 
             with b_act2:
-                with st.popover(f"⚠️ Bulk Flag / Return ({len(selected_job_ids)})", use_container_width=True):
+                with st.popover(f"Bulk Flag / Return ({len(selected_job_ids)})", use_container_width=True):
                     st.markdown("#### Return Selected Jobs")
                     bulk_ret_target = st.selectbox(
                         "Return To Station",
                         ["PAYMENT", "DESIGN", "SALES"],
                         format_func=lambda x: {
-                            "PAYMENT": "💳 Accounts / Advance Clearance",
-                            "DESIGN": "🎨 Design & Proofs",
-                            "SALES": "📝 Order Intake / Sales"
+                            "PAYMENT": "Accounts / Advance Clearance",
+                            "DESIGN": "Design & Proofs",
+                            "SALES": "Order Intake / Sales"
                         }.get(x, x),
                         key="bulk_ret_target"
                     )
@@ -244,6 +369,7 @@ def render(user):
                         if not bulk_ret_reason.strip():
                             st.error("Please enter a return explanation.")
                         else:
+                            _clear_active_modals()
                             try:
                                 for bid in selected_job_ids:
                                     supabase.table("jobs").update({
@@ -255,7 +381,7 @@ def render(user):
                                     if f"prod_chk_{bid}" in st.session_state:
                                         del st.session_state[f"prod_chk_{bid}"]
                                 log_audit(user["user_id"], "BULK_PRODUCTION_RETURN", f"Returned jobs {selected_job_ids} to {bulk_ret_target}: {bulk_ret_reason.strip()}")
-                                st.warning(f"{len(selected_job_ids)} job(s) returned to {bulk_ret_target}.")
+                                st.session_state["prod_toast_msg"] = f"{len(selected_job_ids)} job(s) returned to {bulk_ret_target}."
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Bulk return failed: {e}")
@@ -264,52 +390,10 @@ def render(user):
         st.info("No active jobs pending on the production floor.")
         return
 
-    # --- CUSTOM LINK BUTTON STYLING (FLAT TEXT LINK, NO BUTTON BOX) ---
-    st.markdown("""
-        <style>
-        .tbl-cell-text {
-            font-size: 13px !important;
-            font-family: inherit !important;
-            color: #1e293b !important;
-            font-weight: 500 !important;
-            line-height: 1.4 !important;
-            padding-top: 8px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .tbl-cell-header {
-            font-size: 13px !important;
-            font-family: inherit !important;
-            font-weight: 700 !important;
-            color: #475569 !important;
-            letter-spacing: 0.3px;
-            text-transform: uppercase;
-        }
-        /* Removes Streamlit button styling to make it look like a clean text link */
-        div[data-testid="stHorizontalBlock"] button[kind="secondary"] {
-            border: none !important;
-            background: transparent !important;
-            color: #2563eb !important;
-            padding: 6px 0 !important;
-            font-weight: 700 !important;
-            font-size: 13px !important;
-            text-align: left !important;
-            justify-content: flex-start !important;
-            box-shadow: none !important;
-        }
-        div[data-testid="stHorizontalBlock"] button[kind="secondary"]:hover {
-            color: #1d4ed8 !important;
-            text-decoration: underline !important;
-            background: transparent !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
     # --- TABLE HEADER ---
     st.markdown("""
-        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px;">
-            <div style="display: grid; grid-template-columns: 0.4fr 1.2fr 1fr 1.8fr 1.6fr 1.1fr 1.2fr 1.7fr; align-items: center; gap: 8px;">
+        <div class="adnet-table-header" style="padding: 10px 14px;">
+            <div style="display: grid; grid-template-columns: 0.3fr 1.1fr 1fr 1.8fr 1.6fr 1.1fr 1.2fr 1.8fr; align-items: center; gap: 8px;">
                 <div class="tbl-cell-header">&nbsp;</div>
                 <div class="tbl-cell-header">Job No.</div>
                 <div class="tbl-cell-header">Date</div>
@@ -322,6 +406,9 @@ def render(user):
         </div>
     """, unsafe_allow_html=True)
 
+    def _open_view_modal(target_jid):
+        st.session_state["view_prod_job_id"] = target_jid
+
     # --- TABLE ROWS ---
     for job in page_records:
         jid = job["job_id"]
@@ -332,70 +419,117 @@ def render(user):
         contact_ph = job.get("contact_phone") or "N/A"
         due_date_str = str(job.get("due_date") or "N/A")
 
-        items = get_job_items(jid)
+        items = get_job_items(jid) or []
         total_val = sum(float(it.get("amount", 0) or 0) for it in items)
 
         r_chk, r_no, r_date, r_client, r_contact, r_due, r_val, r_act = st.columns(
-            [0.4, 1.2, 1, 1.8, 1.6, 1.1, 1.2, 1.7]
+            [0.3, 1.1, 1, 1.8, 1.6, 1.1, 1.2, 1.8],
+            vertical_alignment="center",
         )
 
         with r_chk:
-            st.checkbox(" ", key=f"prod_chk_{jid}", label_visibility="collapsed")
-
-        with r_no:
-            # Clean text link button (styled flat without button borders)
-            if st.button(f"JOB-{job_no}", key=f"btn_link_{jid}", help="Click to view full job details"):
-                st.session_state["view_prod_job_id"] = jid
-
-        with r_date:
-            st.markdown(f"<div class='tbl-cell-text'>{created_date}</div>", unsafe_allow_html=True)
-
-        with r_client:
-            st.markdown(f"<div class='tbl-cell-text' title='{client_name}'>{client_name}</div>", unsafe_allow_html=True)
-
-        with r_contact:
-            st.markdown(f"<div class='tbl-cell-text' title='{contact_p} ({contact_ph})'>{contact_p} <span style='color:#64748b; font-size:11px;'>({contact_ph})</span></div>", unsafe_allow_html=True)
-
-        with r_due:
-            st.markdown(f"<div class='tbl-cell-text'>{due_date_str}</div>", unsafe_allow_html=True)
-
-        with r_val:
-            st.markdown(f"<div class='tbl-cell-text' style='text-align: right; font-weight: 700;'>₹ {total_val:,.2f}</div>", unsafe_allow_html=True)
-
-        with r_act:
-            action_choice = st.selectbox(
-                "Action",
-                options=["Select Action", "✅ Production Completed (Send to QC)", "⚠️ Return / Flag Job"],
-                index=0,
-                key=f"act_prod_{jid}",
-                label_visibility="collapsed"
+            st.checkbox(
+                " ",
+                key=f"prod_chk_{jid}",
+                label_visibility="collapsed",
+                on_change=_clear_active_modals,
             )
 
-            if action_choice == "✅ Production Completed (Send to QC)":
-                with st.popover(f"Confirm QC Handover #{job_no}", use_container_width=True):
-                    st.success(f"Forward Job #{job_no} directly to the QC Desk?")
-                    if st.button("Confirm Handover", key=f"btn_qc_confirm_{jid}", type="primary", use_container_width=True):
-                        try:
-                            supabase.table("jobs").update({
-                                "current_stage": "QC",
-                                "is_returned": False
-                            }).eq("job_id", int(jid)).execute()
-                            log_audit(user["user_id"], "PRODUCTION_COMPLETED", f"Job #{job_no} sent to QC Desk")
-                            st.success(f"Job #{job_no} forwarded to QC Desk.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Failed to update status: {e}")
+        with r_no:
+            st.button(
+                f"JOB-{job_no}",
+                key=f"btn_link_{jid}",
+                type="tertiary",
+                help="Click to view full job details",
+                on_click=_open_view_modal,
+                args=(jid,),
+            )
 
-            elif action_choice == "⚠️ Return / Flag Job":
+        with r_date:
+            st.button(
+                created_date,
+                key=f"prod_m_dt_{jid}",
+                type="tertiary",
+                on_click=_open_view_modal,
+                args=(jid,),
+            )
+
+        with r_client:
+            st.button(
+                client_name,
+                key=f"prod_m_cl_{jid}",
+                type="tertiary",
+                help=client_name,
+                on_click=_open_view_modal,
+                args=(jid,),
+            )
+
+        with r_contact:
+            st.button(
+                f"{contact_p} ({contact_ph})",
+                key=f"prod_m_cp_{jid}",
+                type="tertiary",
+                help=f"{contact_p} ({contact_ph})",
+                on_click=_open_view_modal,
+                args=(jid,),
+            )
+
+        with r_due:
+            st.button(
+                due_date_str,
+                key=f"prod_m_due_{jid}",
+                type="tertiary",
+                on_click=_open_view_modal,
+                args=(jid,),
+            )
+
+        with r_val:
+            st.button(
+                f"₹ {total_val:,.2f}",
+                key=f"prod_m_val_{jid}",
+                type="tertiary",
+                on_click=_open_view_modal,
+                args=(jid,),
+            )
+
+        with r_act:
+            def _on_prod_action_change(target_job=job):
+                t_jid = target_job["job_id"]
+                t_jno = target_job.get("job_no", str(t_jid))
+                choice = st.session_state.get(f"act_prod_{t_jid}")
+                if choice == "Production Completed":
+                    st.session_state["view_prod_job_id"] = None
+                    try:
+                        supabase.table("jobs").update({
+                            "current_stage": "QC",
+                            "is_returned": False
+                        }).eq("job_id", int(t_jid)).execute()
+                        log_audit(user["user_id"], "PRODUCTION_COMPLETED", f"Job #{t_jno} sent to QC Desk")
+                        st.session_state["prod_toast_msg"] = f"Job #{t_jno} forwarded to QC Desk."
+                    except Exception as e:
+                        st.session_state["prod_err_msg"] = f"Failed to update status: {e}"
+                st.session_state[f"act_prod_{t_jid}"] = "Select Action"
+
+            action_choice = st.selectbox(
+                "Action",
+                options=["Select Action", "Production Completed", "Return / Flag Job"],
+                index=0,
+                key=f"act_prod_{jid}",
+                label_visibility="collapsed",
+                on_change=_on_prod_action_change,
+                args=(job,),
+            )
+
+            if action_choice == "Return / Flag Job":
                 with st.popover(f"Return Job #{job_no}", use_container_width=True):
                     st.markdown("#### Return Station")
                     return_target = st.selectbox(
                         "Return To Station",
                         ["PAYMENT", "DESIGN", "SALES"],
                         format_func=lambda x: {
-                            "PAYMENT": "💳 Accounts / Advance Clearance",
-                            "DESIGN": "🎨 Design & Proofs",
-                            "SALES": "📝 Order Intake / Sales"
+                            "PAYMENT": "Accounts / Advance Clearance",
+                            "DESIGN": "Design & Proofs",
+                            "SALES": "Order Intake / Sales"
                         }.get(x, x),
                         key=f"ret_tgt_{jid}"
                     )
@@ -408,6 +542,7 @@ def render(user):
                         if not reason.strip():
                             st.error("Please enter a return reason.")
                         else:
+                            _clear_active_modals()
                             try:
                                 supabase.table("jobs").update({
                                     "current_stage": return_target,
@@ -416,17 +551,19 @@ def render(user):
                                     "return_reason": reason.strip()
                                 }).eq("job_id", int(jid)).execute()
                                 log_audit(user["user_id"], "PRODUCTION_RETURN", f"Job #{job_no} returned to {return_target}: {reason.strip()}")
-                                st.warning(f"Job #{job_no} returned to {return_target}.")
+                                st.session_state["prod_toast_msg"] = f"Job #{job_no} returned to {return_target}."
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Failed to return job: {e}")
+
+        st.markdown("<hr style='margin: 4px 0 8px 0; border: none; border-top: 1px solid #edf2f7;' />", unsafe_allow_html=True)
 
     # --- MODAL TRIGGER WHEN JOB LINK IS CLICKED ---
     active_jid = st.session_state.get("view_prod_job_id")
     if active_jid:
         job_match = next((j for j in jobs if j["job_id"] == active_jid), None)
         if job_match:
-            job_match_items = get_job_items(active_jid)
+            job_match_items = get_job_items(active_jid) or []
             show_job_details_modal(job_match, job_match_items, vendors, user)
 
     # --- PAGINATION CONTROLS AT BOTTOM ---
@@ -436,12 +573,13 @@ def render(user):
 
         with p_c2:
             if st.button("◀ Previous", disabled=(curr_page <= 1), use_container_width=True, key="prod_pg_prev"):
+                _clear_active_modals()
                 st.session_state.prod_page_num = max(1, curr_page - 1)
                 st.rerun()
 
         with p_c3:
             st.markdown(
-                f"<div style='text-align: center; padding-top: 6px; font-size: 14px; font-weight: 600; color: #475569;'>"
+                f"<div style='text-align: center; padding-top: 6px; font-size: 13px; font-weight: 600; color: #1e293b;'>"
                 f"Page {curr_page} of {total_pages}"
                 f"</div>",
                 unsafe_allow_html=True
@@ -449,5 +587,6 @@ def render(user):
 
         with p_c4:
             if st.button("Next ▶", disabled=(curr_page >= total_pages), use_container_width=True, key="prod_pg_next"):
+                _clear_active_modals()
                 st.session_state.prod_page_num = min(total_pages, curr_page + 1)
                 st.rerun()
