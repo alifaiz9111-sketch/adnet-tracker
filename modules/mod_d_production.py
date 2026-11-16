@@ -518,7 +518,7 @@ def render(user):
 
             st.selectbox(
                 "Action",
-                options=["Select Action", "✅ Production Completed (Send to QC)", "⚠️ Return / Flag Job"],
+                options=["Select Action", "Completed", "Return Job"],
                 index=0,
                 key=f"act_prod_{jid}",
                 label_visibility="collapsed",
