@@ -9,11 +9,126 @@ from database import (
     log_audit,
 )
 
+# ALI Theme: Unified Font, Size & Color across Main View and All Dialogs
+_UNIFORM_MODULE_CSS = """
+    <style>
+    /* Base uniform typography for main view and modals */
+    div[data-testid="stAppViewContainer"] .main p,
+    div[data-testid="stAppViewContainer"] .main span,
+    div[data-testid="stAppViewContainer"] .main label,
+    div[data-testid="stAppViewContainer"] .main input,
+    div[data-testid="stAppViewContainer"] .main textarea,
+    div[data-testid="stAppViewContainer"] .main select,
+    div[data-testid="stAppViewContainer"] .main div[data-testid="stCaptionContainer"] p,
+    div[data-testid="stAppViewContainer"] .main div[data-testid="stMarkdownContainer"] p,
+    div[data-testid="stAppViewContainer"] .main div[data-baseweb="select"] div,
+    div[data-testid="stAppViewContainer"] .main div[data-baseweb="input"] input,
+    div[data-testid="stDialog"] p,
+    div[data-testid="stDialog"] span,
+    div[data-testid="stDialog"] label,
+    div[data-testid="stDialog"] input,
+    div[data-testid="stDialog"] textarea,
+    div[data-testid="stDialog"] select,
+    div[data-testid="stDialog"] div[data-testid="stCaptionContainer"] p,
+    div[data-testid="stDialog"] div[data-testid="stMarkdownContainer"] p,
+    div[data-testid="stDialog"] div[data-baseweb="select"] div,
+    div[data-testid="stDialog"] div[data-baseweb="input"] input {
+        font-family: inherit !important;
+        font-size: 13px !important;
+        color: #1e293b !important;
+    }
+
+    /* Unified Section & Dialog Subheaders */
+    div[data-testid="stAppViewContainer"] .main h3,
+    div[data-testid="stAppViewContainer"] .main h4,
+    div[data-testid="stAppViewContainer"] .main h5,
+    div[data-testid="stDialog"] h3,
+    div[data-testid="stDialog"] h4,
+    div[data-testid="stDialog"] h5 {
+        font-family: inherit !important;
+        font-size: 15px !important;
+        font-weight: 700 !important;
+        color: #1e293b !important;
+    }
+
+    /* Keep primary action buttons readable */
+    div[data-testid="stAppViewContainer"] .main button[kind="primary"] p,
+    div[data-testid="stAppViewContainer"] .main button[kind="primary"] span,
+    div[data-testid="stDialog"] button[kind="primary"] p,
+    div[data-testid="stDialog"] button[kind="primary"] span {
+        color: #ffffff !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+    }
+
+    /* Table Header & Cell Styles */
+    .tbl-cell-header {
+        font-size: 13px !important;
+        font-family: inherit !important;
+        font-weight: 700 !important;
+        color: #1e293b !important;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+    }
+
+    /* Checkbox & Dropdown Vertical Alignment inside 38px rows */
+    div[data-testid="stCheckbox"] {
+        display: flex;
+        align-items: center;
+        height: 38px;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    div[data-testid="stCheckbox"] label {
+        margin-bottom: 0 !important;
+    }
+    div[data-testid="stSelectbox"] {
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+    }
+
+    /* Flat clickable text styling in Table (tertiary only, preserves secondary button borders) */
+    div[data-testid="stHorizontalBlock"] button[kind="tertiary"] {
+        border: none !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        padding: 6px 0 !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        font-family: inherit !important;
+        color: #1e293b !important;
+        text-align: left !important;
+        justify-content: flex-start !important;
+        align-items: center !important;
+        display: flex !important;
+        height: 38px !important;
+        min-height: 38px !important;
+        max-height: 38px !important;
+        width: 100% !important;
+        line-height: 1.4 !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+    div[data-testid="stHorizontalBlock"] button[kind="tertiary"]:hover {
+        color: #E11D48 !important;
+        text-decoration: underline !important;
+        background: transparent !important;
+    }
+    </style>
+"""
+
+
+def _clear_active_modals():
+    st.session_state["des_view_jid"] = None
+
+
 @st.dialog("Jobsheet Details")
 def show_jobsheet_spec_modal(job):
     """Displays jobsheet particulars and pre-press specifications with all monetary values masked."""
+    st.markdown(_UNIFORM_MODULE_CSS, unsafe_allow_html=True)
     items = get_job_items(job["job_id"])
-    
+
     # 1. Header Information
     c1, c2 = st.columns(2)
     with c1:
@@ -44,11 +159,13 @@ def show_jobsheet_spec_modal(job):
                 if it.get("delivery_address"):
                     st.caption(f"Destination: {it.get('delivery_address')}")
 
-    # st.markdown("---")
-    # st.caption("Commercial rates, item values, and order amounts are masked for Pre-Press & Design.")
+    if st.button("Close", use_container_width=True, key=f"cls_view_des_{job['job_id']}"):
+        st.session_state["des_view_jid"] = None
+        st.rerun()
 
 
 def render(user):
+    st.markdown(_UNIFORM_MODULE_CSS, unsafe_allow_html=True)
     st.subheader("Module 2: Design Approval & Proofing Desk")
     st.caption(
         f"Graphic Artist / Pre-Press: **{user['full_name']}** | Role: `{user.get('account_type')}`"
@@ -83,8 +200,9 @@ def render(user):
 
     # Callback to reset filters
     def _reset_design_filters():
+        _clear_active_modals()
         st.session_state["des_search_kw"] = ""
-        st.session_state["des_designer_filter"] = "All Designers"
+        st.session_state["des_designer_filter"] = "Mine"
         st.session_state["des_sort_filter"] = "Recent Jobs (Newest First)"
         st.session_state["des_page_num"] = 1
 
@@ -95,18 +213,26 @@ def render(user):
             search_kw = st.text_input(
                 "Search Orders",
                 placeholder="Job No, Client, Contact...",
-                key="des_search_kw"
+                key="des_search_kw",
+                on_change=_clear_active_modals,
             ).strip().lower()
 
         with f2:
             designer_opts = ["Mine", "Open Pool", "Return"]
-            sel_designer = st.selectbox("Assigned", options=designer_opts, index=0, key="des_designer_filter")
+            sel_designer = st.selectbox(
+                "Assigned",
+                options=designer_opts,
+                index=0,
+                key="des_designer_filter",
+                on_change=_clear_active_modals,
+            )
 
         with f3:
             sort_order = st.selectbox(
                 "Sort By",
                 options=["Recent Jobs (Newest First)", "Oldest Jobs", "Delivery Due Soonest"],
-                key="des_sort_filter"
+                key="des_sort_filter",
+                on_change=_clear_active_modals,
             )
 
         with f4:
@@ -116,7 +242,7 @@ def render(user):
                 type="secondary",
                 use_container_width=True,
                 key="des_reset_btn",
-                on_click=_reset_design_filters
+                on_click=_reset_design_filters,
             )
 
     # --- Filter Logic ---
@@ -186,6 +312,7 @@ def render(user):
                     st.markdown(f"**Approve {len(selected_job_ids)} Order(s)?**")
                     st.caption("Pushes all selected orders forward to Accounts Clearance (PAYMENT).")
                     if st.button("Confirm Bulk Approval", type="primary", use_container_width=True, key="btn_confirm_bulk_app"):
+                        _clear_active_modals()
                         ok, msg = bulk_approve_design_jobs(selected_job_ids, user["full_name"])
                         if ok:
                             for jid in selected_job_ids:
@@ -204,6 +331,7 @@ def render(user):
                         if not bulk_reason.strip():
                             st.error("Please provide a reason before returning.")
                         else:
+                            _clear_active_modals()
                             ok, msg = bulk_reject_design_jobs(selected_job_ids, user["full_name"], bulk_reason.strip())
                             if ok:
                                 for jid in selected_job_ids:
@@ -218,89 +346,7 @@ def render(user):
         st.info("No matching design approval orders found.")
         return
 
-    st.markdown("""
-        <style>
-        .tbl-cell-header {
-            font-size: 13px !important;
-            font-family: inherit !important;
-            font-weight: 700 !important;
-            color: #475569 !important;
-            letter-spacing: 0.3px;
-            text-transform: uppercase;
-        }
-        .tbl-cell-text {
-            font-size: 13px !important;
-            font-family: inherit !important;
-            color: #1e293b !important;
-            font-weight: 500 !important;
-            line-height: 1.4 !important;
-            display: flex;
-            align-items: center;
-            height: 38px;
-            margin: 0 !important;
-            padding: 0 !important;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            cursor: pointer;
-        }
-        .tbl-cell-text:hover {
-            color: #E11D48 !important;
-        }
-        /* Make the checkbox align vertically in the middle */
-        div[data-testid="stCheckbox"] {
-            display: flex;
-            align-items: center;
-            height: 38px;
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-        div[data-testid="stCheckbox"] label {
-            margin-bottom: 0 !important;
-        }
-        /* Make the action dropdown align vertically in the middle */
-        div[data-testid="stSelectbox"] {
-            margin-top: 0 !important;
-            margin-bottom: 0 !important;
-        }
-        /* Invisible overlay button */
-        .inv-cell-btn button,
-        .inv-cell-btn button[data-testid="baseButton-tertiary"] {
-            border: none !important;
-            background: transparent !important;
-            color: #1e293b !important;
-            font-size: 13px !important;
-            font-weight: 500 !important;
-            font-family: inherit !important;
-            text-align: left !important;
-            justify-content: flex-start !important;
-            align-items: center !important;
-            display: flex !important;
-            height: 38px !important;
-            min-height: 38px !important;
-            max-height: 38px !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            box-shadow: none !important;
-            width: 100% !important;
-            line-height: 1.4 !important;
-            white-space: nowrap !important;
-            overflow: hidden !important;
-            text-overflow: ellipsis !important;
-        }
-        .inv-cell-btn button:hover {
-            color: #E11D48 !important;
-            background: transparent !important;
-        }
-        .inv-cell-btn div[data-testid="stButton"] {
-            margin: 0 !important;
-            padding: 0 !important;
-            height: 38px !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-    # --- Table Header Bar (Blank for tick mark, Job No., Date, Client, Contact, Delivery Date, Action) ---
+    # --- Table Header Bar (ALI Theme 7-Column Ratio) ---
     st.markdown("""
         <div class="adnet-table-header" style="padding: 10px 14px;">
             <div style="display: grid; grid-template-columns: 0.3fr 1.1fr 1.1fr 2.3fr 2.1fr 1.3fr 1.8fr; align-items: center; gap: 8px;">
@@ -315,7 +361,9 @@ def render(user):
         </div>
     """, unsafe_allow_html=True)
 
-    # --- Table Data Rows ---
+    def _open_view_modal(target_jid):
+        st.session_state["des_view_jid"] = target_jid
+
     # --- Table Data Rows ---
     for j in page_records:
         jid = j["job_id"]
@@ -329,49 +377,73 @@ def render(user):
 
         r_chk, r_no, r_date, r_client, r_contact, r_due, r_act = st.columns(
             [0.3, 1.1, 1.1, 2.3, 2.1, 1.3, 1.8],
-            vertical_alignment="center"
+            vertical_alignment="center",
         )
 
         with r_chk:
-            st.checkbox(" ", key=f"des_chk_{jid}", label_visibility="collapsed")
+            st.checkbox(
+                " ",
+                key=f"des_chk_{jid}",
+                label_visibility="collapsed",
+                on_change=_clear_active_modals,
+            )
 
         with r_no:
-            st.markdown('<div class="inv-cell-btn">', unsafe_allow_html=True)
-            if st.button(f"JOB-{job_no}", key=f"btn_m_no_{jid}", type="tertiary"):
-                show_jobsheet_spec_modal(j)
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.button(
+                f"JOB-{job_no}",
+                key=f"btn_m_no_{jid}",
+                type="tertiary",
+                help="Click to view job details",
+                on_click=_open_view_modal,
+                args=(jid,),
+            )
 
         with r_date:
-            st.markdown('<div class="inv-cell-btn">', unsafe_allow_html=True)
-            if st.button(created_date, key=f"btn_m_dt_{jid}", type="tertiary"):
-                show_jobsheet_spec_modal(j)
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.button(
+                created_date,
+                key=f"btn_m_dt_{jid}",
+                type="tertiary",
+                on_click=_open_view_modal,
+                args=(jid,),
+            )
 
         with r_client:
-            st.markdown('<div class="inv-cell-btn">', unsafe_allow_html=True)
-            if st.button(client_name, key=f"btn_m_cl_{jid}", type="tertiary", help=client_name):
-                show_jobsheet_spec_modal(j)
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.button(
+                client_name,
+                key=f"btn_m_cl_{jid}",
+                type="tertiary",
+                help=client_name,
+                on_click=_open_view_modal,
+                args=(jid,),
+            )
 
         with r_contact:
-            st.markdown('<div class="inv-cell-btn">', unsafe_allow_html=True)
-            if st.button(contact_label, key=f"btn_m_cp_{jid}", type="tertiary", help=contact_label):
-                show_jobsheet_spec_modal(j)
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.button(
+                contact_label,
+                key=f"btn_m_cp_{jid}",
+                type="tertiary",
+                help=contact_label,
+                on_click=_open_view_modal,
+                args=(jid,),
+            )
 
         with r_due:
-            st.markdown('<div class="inv-cell-btn">', unsafe_allow_html=True)
-            if st.button(due_date_str, key=f"btn_m_due_{jid}", type="tertiary"):
-                show_jobsheet_spec_modal(j)
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.button(
+                due_date_str,
+                key=f"btn_m_due_{jid}",
+                type="tertiary",
+                on_click=_open_view_modal,
+                args=(jid,),
+            )
 
         with r_act:
             action_choice = st.selectbox(
                 "Action",
-                options=["  ", "Approved", "Send to Sales"],
+                options=["Select Action", "Approved", "Send to Sales"],
                 index=0,
                 key=f"des_act_drp_{jid}",
-                label_visibility="collapsed"
+                label_visibility="collapsed",
+                on_change=_clear_active_modals,
             )
 
             # Option 1: Approved -> Routes to Accounts (PAYMENT)
@@ -405,12 +477,20 @@ def render(user):
 
         st.markdown("<hr style='margin: 4px 0 8px 0; border: none; border-top: 1px solid #edf2f7;' />", unsafe_allow_html=True)
 
+    # Open Details Modal when any row text is clicked
+    view_jid = st.session_state.get("des_view_jid")
+    if view_jid:
+        target_job = next((x for x in all_design_jobs if x["job_id"] == view_jid), None)
+        if target_job:
+            show_jobsheet_spec_modal(target_job)
+
     # --- 15-Row Pagination Footer ---
     if total_pages > 1:
         st.markdown("<br>", unsafe_allow_html=True)
         p_cols = st.columns([2, 1, 1, 1, 1, 1, 2])
         with p_cols[1]:
             if st.button("<", disabled=(curr_page == 1), key="des_p_prev_btn", use_container_width=True):
+                _clear_active_modals()
                 st.session_state.des_page_num = max(1, curr_page - 1)
                 st.rerun()
 
@@ -419,10 +499,12 @@ def render(user):
                 is_active = (p_idx == curr_page)
                 btn_type = "primary" if is_active else "secondary"
                 if st.button(str(p_idx), type=btn_type, key=f"des_p_btn_{p_idx}", use_container_width=True):
+                    _clear_active_modals()
                     st.session_state.des_page_num = p_idx
                     st.rerun()
 
         with p_cols[6]:
             if st.button(">", disabled=(curr_page == total_pages), key="des_p_next_btn", use_container_width=True):
+                _clear_active_modals()
                 st.session_state.des_page_num = min(total_pages, curr_page + 1)
                 st.rerun()
