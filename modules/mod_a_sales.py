@@ -783,12 +783,35 @@ def render(user):
                         st.rerun()
                     else:
                         st.error(f"Failed to create jobsheet: {msg}")
-
-    # =========================================================
+# =========================================================
     # TAB 2: ORDER HISTORY & MODIFICATIONS
     # =========================================================
     with t_history:
         my_jobs = get_user_created_jobs(user["full_name"], is_management=is_management) or []
+
+        # Track jobs queued for Admin/CEO deletion approval so they hide immediately from the list
+        if "sales_pending_delete_ids" not in st.session_state:
+            st.session_state["sales_pending_delete_ids"] = set()
+
+        def _submit_delete_request_to_admin(job_obj):
+            jid_val = job_obj["job_id"]
+            jno_val = job_obj.get("job_no", str(jid_val))
+            # Hide immediately from current user's list without hard-deleting from DB
+            st.session_state["sales_pending_delete_ids"].add(jid_val)
+            try:
+                from database import supabase
+                supabase.table("jobs").update({
+                    "is_returned": True,
+                    "returned_by": f"{user['full_name']} (Delete Request)",
+                    "return_reason": f"DELETE_REQUEST: Sales requested deletion of Job #{jno_val} — awaiting Admin/CEO approval."
+                }).eq("job_id", int(jid_val)).execute()
+            except Exception:
+                pass
+            log_audit(
+                user["user_id"],
+                "DELETE_REQUEST_ADMIN_CEO",
+                f"Sales rep {user['full_name']} requested deletion of Job #{jno_val} (ID: {jid_val}) for Admin/CEO approval"
+            )
 
         floor_names = {
             "DESIGN": "Design Desk",
@@ -844,6 +867,12 @@ def render(user):
 
         filtered_jobs = []
         for j in my_jobs:
+            # Exclude jobs already requested for deletion by the user
+            if j["job_id"] in st.session_state["sales_pending_delete_ids"]:
+                continue
+            if str(j.get("return_reason") or "").startswith("DELETE_REQUEST:"):
+                continue
+
             stg = j.get("current_stage", "DESIGN")
             stg_clean = floor_names.get(stg, stg)
             if sel_floor != "All Statuses" and stg_clean != sel_floor:
@@ -884,16 +913,15 @@ def render(user):
             st.caption(f"Showing **{start_idx + 1 if total_records else 0} to {end_idx}** of **{total_records}** records")
         with bar_col2:
             if selected_job_ids:
-                with st.popover(f"Delete Selected ({len(selected_job_ids)})", use_container_width=True):
-                    st.warning(f"Permanently delete {len(selected_job_ids)} selected job(s)?")
-                    if st.button("Confirm Bulk Delete", type="primary", use_container_width=True, key="btn_bulk_del_confirm"):
-                        for del_jid in selected_job_ids:
-                            delete_job_sheet(del_jid)
-                            if f"tbl_chk_{del_jid}" in st.session_state:
-                                del st.session_state[f"tbl_chk_{del_jid}"]
-                        log_audit(user["user_id"], "BULK_DELETE", f"Deleted jobs: {selected_job_ids}")
-                        st.success(f"{len(selected_job_ids)} job(s) deleted successfully.")
-                        st.rerun()
+                if st.button(f"Request Delete ({len(selected_job_ids)})", type="primary", use_container_width=True, key="btn_bulk_del_req"):
+                    for del_jid in selected_job_ids:
+                        job_obj = next((x for x in page_records if x["job_id"] == del_jid), None)
+                        if job_obj:
+                            _submit_delete_request_to_admin(job_obj)
+                        if f"tbl_chk_{del_jid}" in st.session_state:
+                            del st.session_state[f"tbl_chk_{del_jid}"]
+                    st.toast(f"Deletion request for {len(selected_job_ids)} job(s) sent to Admin/CEO.")
+                    st.rerun()
 
         if not page_records:
             st.info("No matching job orders found.")
@@ -913,6 +941,10 @@ def render(user):
                     </div>
                 </div>
             """, unsafe_allow_html=True)
+
+            def _open_view_modal(target_jid):
+                st.session_state["sales_edit_jid"] = None
+                st.session_state["sales_view_jid"] = target_jid
 
             for j in page_records:
                 jid = j["job_id"]
@@ -935,24 +967,19 @@ def render(user):
                     st.checkbox(" ", key=f"tbl_chk_{jid}", label_visibility="collapsed")
 
                 with r_no:
-                    if st.button(f"JOB-{job_no}", key=f"lnk_no_{jid}", type="tertiary", help="Click to view job details"):
-                        st.session_state["sales_view_jid"] = jid
+                    st.button(f"JOB-{job_no}", key=f"lnk_no_{jid}", type="tertiary", help="Click to view job details", on_click=_open_view_modal, args=(jid,))
 
                 with r_date:
-                    if st.button(created_date, key=f"lnk_dt_{jid}", type="tertiary"):
-                        st.session_state["sales_view_jid"] = jid
+                    st.button(created_date, key=f"lnk_dt_{jid}", type="tertiary", on_click=_open_view_modal, args=(jid,))
 
                 with r_client:
-                    if st.button(client_name, key=f"lnk_cl_{jid}", type="tertiary", help=client_name):
-                        st.session_state["sales_view_jid"] = jid
+                    st.button(client_name, key=f"lnk_cl_{jid}", type="tertiary", help=client_name, on_click=_open_view_modal, args=(jid,))
 
                 with r_contact:
-                    if st.button(f"{contact_p} ({contact_ph})", key=f"lnk_ct_{jid}", type="tertiary"):
-                        st.session_state["sales_view_jid"] = jid
+                    st.button(f"{contact_p} ({contact_ph})", key=f"lnk_ct_{jid}", type="tertiary", on_click=_open_view_modal, args=(jid,))
 
                 with r_due:
-                    if st.button(due_date_str, key=f"lnk_due_{jid}", type="tertiary"):
-                        st.session_state["sales_view_jid"] = jid
+                    st.button(due_date_str, key=f"lnk_due_{jid}", type="tertiary", on_click=_open_view_modal, args=(jid,))
 
                 with r_prog:
                     st.markdown(
@@ -971,13 +998,17 @@ def render(user):
                     )
 
                 with r_act:
-                    def _on_sales_action_change(target_jid=jid):
-                        choice = st.session_state.get(f"act_drp_{target_jid}")
+                    def _on_sales_action_change(target_job=j):
+                        t_jid = target_job["job_id"]
+                        choice = st.session_state.get(f"act_drp_{t_jid}")
+                        st.session_state["sales_view_jid"] = None  # Ensure view modal never opens
                         if choice == "Edit":
-                            st.session_state["sales_edit_jid"] = target_jid
+                            st.session_state["sales_edit_jid"] = t_jid
                         elif choice == "Delete":
-                            st.session_state["sales_del_jid"] = target_jid
-                        st.session_state[f"act_drp_{target_jid}"] = "Select Action"
+                            st.session_state["sales_edit_jid"] = None
+                            _submit_delete_request_to_admin(target_job)
+                            st.toast(f"Delete request for JOB-{target_job.get('job_no', t_jid)} sent to Admin/CEO.")
+                        st.session_state[f"act_drp_{t_jid}"] = "Select Action"
 
                     st.selectbox(
                         "Action",
@@ -986,46 +1017,21 @@ def render(user):
                         key=f"act_drp_{jid}",
                         label_visibility="collapsed",
                         on_change=_on_sales_action_change,
+                        args=(j,),
                     )
 
-            # Open View Details Modal when any row text is clicked
-            view_jid = st.session_state.get("sales_view_jid")
-            if view_jid:
-                target_job = next((x for x in my_jobs if x["job_id"] == view_jid), None)
-                if target_job:
-                    _show_sales_job_details_modal(target_job, floor_names)
-
-            # Open Edit Modal when "Edit" is chosen from Action dropdown
+            # Open Edit Modal directly when "Edit" is selected (takes priority, no intermediate popup)
             edit_jid = st.session_state.get("sales_edit_jid")
+            view_jid = st.session_state.get("sales_view_jid")
+
             if edit_jid:
                 target_job = next((x for x in my_jobs if x["job_id"] == edit_jid), None)
                 if target_job:
                     _show_sales_edit_modal(target_job, user)
-
-            # Confirm Delete Dialog when "Delete" is chosen from Action dropdown
-            del_jid = st.session_state.get("sales_del_jid")
-            if del_jid:
-                target_job = next((x for x in my_jobs if x["job_id"] == del_jid), None)
+            elif view_jid:
+                target_job = next((x for x in my_jobs if x["job_id"] == view_jid), None)
                 if target_job:
-                    @st.dialog("Confirm Delete Jobsheet")
-                    def _confirm_single_delete(job_obj):
-                        st.markdown(_UNIFORM_MODULE_CSS, unsafe_allow_html=True)
-                        jno = job_obj.get("job_no", str(job_obj["job_id"]))
-                        st.warning(f"Permanently delete Job #{jno} ({job_obj.get('client_name', '')})?")
-                        dc1, dc2 = st.columns(2)
-                        with dc1:
-                            if st.button("Cancel", use_container_width=True):
-                                st.session_state["sales_del_jid"] = None
-                                st.rerun()
-                        with dc2:
-                            if st.button("Confirm Delete", type="primary", use_container_width=True):
-                                delete_job_sheet(job_obj["job_id"])
-                                log_audit(user["user_id"], "JOB_DELETED", f"Deleted job #{jno} from Order History")
-                                st.session_state["sales_del_jid"] = None
-                                st.success(f"Job #{jno} deleted successfully.")
-                                st.rerun()
-
-                    _confirm_single_delete(target_job)
+                    _show_sales_job_details_modal(target_job, floor_names)
 
             # Bottom Pagination Bar
             if total_pages > 1:
