@@ -130,15 +130,15 @@ _UNIFORM_MODULE_CSS = """
 
 
 def _sync_commercials(idx, trigger_field):
+    """Calculates H x W x Quantity x Rate = Total Amount for new 2D entries."""
     item = st.session_state.sales_items[idx]
     qty = float(st.session_state.get(f"item_qty_{idx}", item["quantity"]))
     rate = float(st.session_state.get(f"item_rate_{idx}", item["rate"]))
     amount = float(st.session_state.get(f"item_amt_{idx}", item["amount"]))
 
-    l_val = item["length"] if item["length"] > 0 else 1.0
-    b_val = item["breadth"] if item["breadth"] > 0 else 1.0
     h_val = item["height"] if item["height"] > 0 else 1.0
-    dim_factor = l_val * b_val * h_val
+    w_val = item["width"] if item["width"] > 0 else 1.0
+    dim_factor = h_val * w_val
 
     if trigger_field in ["qty", "rate"]:
         new_amt = round(dim_factor * qty * rate, 2)
@@ -163,36 +163,61 @@ def _sync_commercials(idx, trigger_field):
 
 def _recalc_on_dim_change(idx):
     item = st.session_state.sales_items[idx]
-    item["length"] = float(st.session_state.get(f"item_len_{idx}", item["length"]))
-    item["breadth"] = float(st.session_state.get(f"item_brd_{idx}", item["breadth"]))
     item["height"] = float(st.session_state.get(f"item_hgt_{idx}", item["height"]))
+    item["width"] = float(st.session_state.get(f"item_wid_{idx}", item["width"]))
     _sync_commercials(idx, "rate")
 
 
 def _parse_spec_dimensions(spec_str):
-    """Extracts (L, B, H, unit, clean_spec) from a formatted spec string."""
+    """
+    Detects legacy 3-dimension strings ('Size: L x B x H Unit') vs new 2-dimension strings ('Size: H x W Unit').
+    Returns: (is_legacy_3d, dim1, dim2, dim3, unit, clean_spec)
+      - If is_legacy_3d is True:  (True,  L, B, H, unit, notes)
+      - If is_legacy_3d is False: (False, H, W, 1.0, unit, notes)
+    """
     if not spec_str:
-        return 1.0, 1.0, 1.0, "Inch", ""
-    pattern = r"Size:\s*([\d.]+)\s*x\s*([\d.]+)\s*x\s*([\d.]+)\s*(Inch|Ft)(?:\s*\|\s*(.*))?"
-    m = re.match(pattern, spec_str.strip(), re.IGNORECASE)
-    if m:
+        return False, 1.0, 1.0, 1.0, "Inch", ""
+
+    # 1. Check for legacy 3-dimension format: Size: L x B x H Inch/Ft
+    pattern_3d = r"Size:\s*([\d.]+)\s*x\s*([\d.]+)\s*x\s*([\d.]+)\s*(Inch|Ft)(?:\s*\|\s*(.*))?"
+    m3 = re.match(pattern_3d, spec_str.strip(), re.IGNORECASE)
+    if m3:
         try:
-            l_val = float(m.group(1))
-            b_val = float(m.group(2))
-            h_val = float(m.group(3))
-            unit_val = "Ft" if m.group(4).lower() == "ft" else "Inch"
-            notes = (m.group(5) or "").strip()
-            return l_val, b_val, h_val, unit_val, notes
+            l_val = float(m3.group(1))
+            b_val = float(m3.group(2))
+            h_val = float(m3.group(3))
+            unit_val = "Ft" if m3.group(4).lower() == "ft" else "Inch"
+            notes = (m3.group(5) or "").strip()
+            return True, l_val, b_val, h_val, unit_val, notes
         except Exception:
             pass
-    return 1.0, 1.0, 1.0, "Inch", spec_str.strip()
+
+    # 2. Check for new 2-dimension format: Size: H x W Inch/Ft
+    pattern_2d = r"Size:\s*([\d.]+)\s*x\s*([\d.]+)\s*(Inch|Ft)(?:\s*\|\s*(.*))?"
+    m2 = re.match(pattern_2d, spec_str.strip(), re.IGNORECASE)
+    if m2:
+        try:
+            h_val = float(m2.group(1))
+            w_val = float(m2.group(2))
+            unit_val = "Ft" if m2.group(3).lower() == "ft" else "Inch"
+            notes = (m2.group(4) or "").strip()
+            return False, h_val, w_val, 1.0, unit_val, notes
+        except Exception:
+            pass
+
+    return False, 1.0, 1.0, 1.0, "Inch", spec_str.strip()
 
 
-def _sync_edit_commercials(jid, idx, trigger_field, def_l=1.0, def_b=1.0, def_h=1.0, def_q=1.0, def_r=0.0):
-    l_val = float(st.session_state.get(f"ei_l_{jid}_{idx}", def_l))
-    b_val = float(st.session_state.get(f"ei_b_{jid}_{idx}", def_b))
-    h_val = float(st.session_state.get(f"ei_h_{jid}_{idx}", def_h))
-    dim_factor = (l_val if l_val > 0 else 1.0) * (b_val if b_val > 0 else 1.0) * (h_val if h_val > 0 else 1.0)
+def _sync_edit_commercials(jid, idx, trigger_field, is_legacy_3d=False, def_d1=1.0, def_d2=1.0, def_d3=1.0, def_q=1.0, def_r=0.0):
+    if is_legacy_3d:
+        l_val = float(st.session_state.get(f"ei_l_{jid}_{idx}", def_d1))
+        b_val = float(st.session_state.get(f"ei_b_{jid}_{idx}", def_d2))
+        h_val = float(st.session_state.get(f"ei_h_{jid}_{idx}", def_d3))
+        dim_factor = (l_val if l_val > 0 else 1.0) * (b_val if b_val > 0 else 1.0) * (h_val if h_val > 0 else 1.0)
+    else:
+        h_val = float(st.session_state.get(f"ei_h2_{jid}_{idx}", def_d1))
+        w_val = float(st.session_state.get(f"ei_w2_{jid}_{idx}", def_d2))
+        dim_factor = (h_val if h_val > 0 else 1.0) * (w_val if w_val > 0 else 1.0)
 
     qty = float(st.session_state.get(f"ei_q_{jid}_{idx}", def_q))
     rate = float(st.session_state.get(f"ei_r_{jid}_{idx}", def_r))
@@ -204,6 +229,8 @@ def _sync_edit_commercials(jid, idx, trigger_field, def_l=1.0, def_b=1.0, def_h=
     elif trigger_field == "amount":
         if qty > 0 and dim_factor > 0:
             st.session_state[f"ei_r_{jid}_{idx}"] = round(amt / (dim_factor * qty), 2)
+        elif rate > 0 and dim_factor > 0:
+            st.session_state[f"ei_q_{jid}_{idx}"] = round(amt / (dim_factor * rate), 2)
 
 
 def _clear_edit_widget_state(jid):
@@ -357,46 +384,78 @@ def _show_sales_edit_modal(j, user):
             st.caption(f"Item #{idx+1}")
             ei_name = st.text_input("Item Name *", value=it.get("item_name", ""), key=f"ei_nm_{jid}_{idx}")
 
-            def_l, def_b, def_h, def_u, def_notes = _parse_spec_dimensions(it.get("specifications", ""))
+            is_legacy_3d, def_d1, def_d2, def_d3, def_u, def_notes = _parse_spec_dimensions(it.get("specifications", ""))
             def_q = float(it.get("quantity", 1.0))
             def_r = float(it.get("rate", 0.0))
 
-            st.caption("Sizes / Dimensions (Default: 1 x 1 x 1):")
-            ed_s1, ed_s2, ed_s3, ed_s4 = st.columns(4)
-            with ed_s1:
-                ei_l = st.number_input(
-                    "Length (L)",
-                    min_value=0.0,
-                    value=def_l,
-                    step=1.0,
-                    key=f"ei_l_{jid}_{idx}",
-                    on_change=_sync_edit_commercials,
-                    args=(jid, idx, "dim", def_l, def_b, def_h, def_q, def_r),
-                )
-            with ed_s2:
-                ei_b = st.number_input(
-                    "Breadth / Width (B)",
-                    min_value=0.0,
-                    value=def_b,
-                    step=1.0,
-                    key=f"ei_b_{jid}_{idx}",
-                    on_change=_sync_edit_commercials,
-                    args=(jid, idx, "dim", def_l, def_b, def_h, def_q, def_r),
-                )
-            with ed_s3:
-                ei_h = st.number_input(
-                    "Height / Depth (H)",
-                    min_value=0.0,
-                    value=def_h,
-                    step=0.5,
-                    key=f"ei_h_{jid}_{idx}",
-                    on_change=_sync_edit_commercials,
-                    args=(jid, idx, "dim", def_l, def_b, def_h, def_q, def_r),
-                )
-            with ed_s4:
-                unit_opts = ["Inch", "Ft"]
-                u_idx = unit_opts.index(def_u) if def_u in unit_opts else 0
-                ei_unit = st.selectbox("Size Unit", unit_opts, index=u_idx, key=f"ei_u_{jid}_{idx}")
+            if is_legacy_3d:
+                # Legacy 3-dimension item (L x B x H) preserved as-is
+                st.caption("Sizes / Dimensions (L x B x H):")
+                ed_s1, ed_s2, ed_s3, ed_s4 = st.columns(4)
+                with ed_s1:
+                    ei_l = st.number_input(
+                        "Length (L)",
+                        min_value=0.0,
+                        value=def_d1,
+                        step=1.0,
+                        key=f"ei_l_{jid}_{idx}",
+                        on_change=_sync_edit_commercials,
+                        args=(jid, idx, "dim", True, def_d1, def_d2, def_d3, def_q, def_r),
+                    )
+                with ed_s2:
+                    ei_b = st.number_input(
+                        "Breadth / Width (B)",
+                        min_value=0.0,
+                        value=def_d2,
+                        step=1.0,
+                        key=f"ei_b_{jid}_{idx}",
+                        on_change=_sync_edit_commercials,
+                        args=(jid, idx, "dim", True, def_d1, def_d2, def_d3, def_q, def_r),
+                    )
+                with ed_s3:
+                    ei_h = st.number_input(
+                        "Height / Depth (H)",
+                        min_value=0.0,
+                        value=def_d3,
+                        step=0.5,
+                        key=f"ei_h_{jid}_{idx}",
+                        on_change=_sync_edit_commercials,
+                        args=(jid, idx, "dim", True, def_d1, def_d2, def_d3, def_q, def_r),
+                    )
+                with ed_s4:
+                    unit_opts = ["Inch", "Ft"]
+                    u_idx = unit_opts.index(def_u) if def_u in unit_opts else 0
+                    ei_unit = st.selectbox("Size Unit", unit_opts, index=u_idx, key=f"ei_u_{jid}_{idx}")
+                size_str = f"Size: {ei_l} x {ei_b} x {ei_h} {ei_unit}"
+            else:
+                # New 2-dimension item (Height x Width)
+                st.caption("Sizes / Dimensions (Height x Width):")
+                ed_s1, ed_s2, ed_s3 = st.columns(3)
+                with ed_s1:
+                    ei_h2 = st.number_input(
+                        "Height (H)",
+                        min_value=0.0,
+                        value=def_d1,
+                        step=1.0,
+                        key=f"ei_h2_{jid}_{idx}",
+                        on_change=_sync_edit_commercials,
+                        args=(jid, idx, "dim", False, def_d1, def_d2, 1.0, def_q, def_r),
+                    )
+                with ed_s2:
+                    ei_w2 = st.number_input(
+                        "Width (W)",
+                        min_value=0.0,
+                        value=def_d2,
+                        step=1.0,
+                        key=f"ei_w2_{jid}_{idx}",
+                        on_change=_sync_edit_commercials,
+                        args=(jid, idx, "dim", False, def_d1, def_d2, 1.0, def_q, def_r),
+                    )
+                with ed_s3:
+                    unit_opts = ["Inch", "Ft"]
+                    u_idx = unit_opts.index(def_u) if def_u in unit_opts else 0
+                    ei_unit = st.selectbox("Size Unit", unit_opts, index=u_idx, key=f"ei_u_{jid}_{idx}")
+                size_str = f"Size: {ei_h2} x {ei_w2} {ei_unit}"
 
             st.caption("Commercials (Fill any 2 fields to auto-calculate the 3rd):")
             iq1, iq2, iq3 = st.columns(3)
@@ -408,7 +467,7 @@ def _show_sales_edit_modal(j, user):
                     step=1.0,
                     key=f"ei_q_{jid}_{idx}",
                     on_change=_sync_edit_commercials,
-                    args=(jid, idx, "qty", def_l, def_b, def_h, def_q, def_r),
+                    args=(jid, idx, "qty", is_legacy_3d, def_d1, def_d2, def_d3, def_q, def_r),
                 )
             with iq2:
                 ei_rate = st.number_input(
@@ -418,7 +477,7 @@ def _show_sales_edit_modal(j, user):
                     step=10.0,
                     key=f"ei_r_{jid}_{idx}",
                     on_change=_sync_edit_commercials,
-                    args=(jid, idx, "rate", def_l, def_b, def_h, def_q, def_r),
+                    args=(jid, idx, "rate", is_legacy_3d, def_d1, def_d2, def_d3, def_q, def_r),
                 )
             with iq3:
                 ei_amt = st.number_input(
@@ -428,7 +487,7 @@ def _show_sales_edit_modal(j, user):
                     step=50.0,
                     key=f"ei_amt_{jid}_{idx}",
                     on_change=_sync_edit_commercials,
-                    args=(jid, idx, "amount", def_l, def_b, def_h, def_q, def_r),
+                    args=(jid, idx, "amount", is_legacy_3d, def_d1, def_d2, def_d3, def_q, def_r),
                 )
 
             ei_spec_notes = st.text_input(
@@ -444,7 +503,6 @@ def _show_sales_edit_modal(j, user):
                 key=f"ei_ad_{jid}_{idx}",
             )
 
-            size_str = f"Size: {ei_l} x {ei_b} x {ei_h} {ei_unit}"
             full_spec = f"{size_str} | {ei_spec_notes.strip()}" if ei_spec_notes.strip() else size_str
 
             edited_items.append({
@@ -515,7 +573,7 @@ def render(user):
     t_create, t_history = st.tabs(["Create New Jobsheet", "Order History & Modifications"])
 
     # =========================================================
-    # TAB 1: CREATE NEW JOBSHEET
+    # TAB 1: CREATE NEW JOBSHEET (2D: HEIGHT x WIDTH ONLY)
     # =========================================================
     with t_create:
         suggested_no = get_next_job_no()
@@ -525,9 +583,8 @@ def render(user):
         if "sales_items" not in st.session_state:
             st.session_state.sales_items = [{
                 "item_name": "",
-                "length": 1.0,
-                "breadth": 1.0,
                 "height": 1.0,
+                "width": 1.0,
                 "dim_unit": "Inch",
                 "quantity": 0.0,
                 "rate": 0.0,
@@ -537,6 +594,10 @@ def render(user):
             }]
         else:
             for itm in st.session_state.sales_items:
+                if "height" not in itm:
+                    itm["height"] = 1.0
+                if "width" not in itm:
+                    itm["width"] = 1.0
                 if itm.get("dim_unit") not in ["Inch", "Ft"]:
                     itm["dim_unit"] = "Inch"
 
@@ -649,9 +710,8 @@ def render(user):
                     if st.button("+ Add Item Row", key="btn_add_item_top", use_container_width=True):
                         st.session_state.sales_items.append({
                             "item_name": "",
-                            "length": 1.0,
-                            "breadth": 1.0,
                             "height": 1.0,
+                            "width": 1.0,
                             "dim_unit": "Inch",
                             "quantity": 0.0,
                             "rate": 0.0,
@@ -678,15 +738,29 @@ def render(user):
                                 if st.button("X", key=f"del_row_{idx}", help="Remove Item"):
                                     rows_to_remove.append(idx)
 
-                        st.caption("Sizes / Dimensions (Default: 1 x 1 x 1):")
-                        s_c1, s_c2, s_c3, s_c4 = st.columns(4)
+                        st.caption("Sizes / Dimensions (Height x Width — Default: 1 x 1):")
+                        s_c1, s_c2, s_c3 = st.columns(3)
                         with s_c1:
-                            item["length"] = st.number_input("Length (L)", min_value=0.0, value=float(item.get("length", 1.0)), step=1.0, key=f"item_len_{idx}", on_change=_recalc_on_dim_change, args=(idx,))
+                            item["height"] = st.number_input(
+                                "Height (H)",
+                                min_value=0.0,
+                                value=float(item.get("height", 1.0)),
+                                step=1.0,
+                                key=f"item_hgt_{idx}",
+                                on_change=_recalc_on_dim_change,
+                                args=(idx,),
+                            )
                         with s_c2:
-                            item["breadth"] = st.number_input("Breadth / Width (B)", min_value=0.0, value=float(item.get("breadth", 1.0)), step=1.0, key=f"item_brd_{idx}", on_change=_recalc_on_dim_change, args=(idx,))
+                            item["width"] = st.number_input(
+                                "Width (W)",
+                                min_value=0.0,
+                                value=float(item.get("width", 1.0)),
+                                step=1.0,
+                                key=f"item_wid_{idx}",
+                                on_change=_recalc_on_dim_change,
+                                args=(idx,),
+                            )
                         with s_c3:
-                            item["height"] = st.number_input("Height / Depth (H)", min_value=0.0, value=float(item.get("height", 1.0)), step=0.5, key=f"item_hgt_{idx}", on_change=_recalc_on_dim_change, args=(idx,))
-                        with s_c4:
                             unit_options = ["Inch", "Ft"]
                             cur_u = item.get("dim_unit", "Inch")
                             u_idx = unit_options.index(cur_u) if cur_u in unit_options else 0
@@ -695,17 +769,51 @@ def render(user):
                         st.caption("Commercials (Fill any 2 fields to auto-calculate the 3rd):")
                         r_c1, r_c2, r_c3 = st.columns(3)
                         with r_c1:
-                            item["quantity"] = st.number_input("Quantity", min_value=0.0, value=float(item.get("quantity", 0.0)), step=1.0, key=f"item_qty_{idx}", on_change=_sync_commercials, args=(idx, "qty"))
+                            item["quantity"] = st.number_input(
+                                "Quantity",
+                                min_value=0.0,
+                                value=float(item.get("quantity", 0.0)),
+                                step=1.0,
+                                key=f"item_qty_{idx}",
+                                on_change=_sync_commercials,
+                                args=(idx, "qty"),
+                            )
                         with r_c2:
-                            item["rate"] = st.number_input("Rate (INR)", min_value=0.0, value=float(item.get("rate", 0.0)), step=10.0, key=f"item_rate_{idx}", on_change=_sync_commercials, args=(idx, "rate"))
+                            item["rate"] = st.number_input(
+                                "Rate (INR)",
+                                min_value=0.0,
+                                value=float(item.get("rate", 0.0)),
+                                step=10.0,
+                                key=f"item_rate_{idx}",
+                                on_change=_sync_commercials,
+                                args=(idx, "rate"),
+                            )
                         with r_c3:
-                            item["amount"] = st.number_input("Total Amount (INR)", min_value=0.0, value=float(item.get("amount", 0.0)), step=50.0, key=f"item_amt_{idx}", on_change=_sync_commercials, args=(idx, "amount"))
+                            item["amount"] = st.number_input(
+                                "Total Amount (INR)",
+                                min_value=0.0,
+                                value=float(item.get("amount", 0.0)),
+                                step=50.0,
+                                key=f"item_amt_{idx}",
+                                on_change=_sync_commercials,
+                                args=(idx, "amount"),
+                            )
 
                         d_c1, d_c2 = st.columns(2)
                         with d_c1:
-                            item["specifications"] = st.text_input("Technical Specifications / Material Notes", value=item.get("specifications", ""), placeholder="e.g. 5mm Clear Acrylic, 3M vinyl, LED modules", key=f"item_spec_{idx}")
+                            item["specifications"] = st.text_input(
+                                "Technical Specifications / Material Notes",
+                                value=item.get("specifications", ""),
+                                placeholder="e.g. 5mm Clear Acrylic, 3M vinyl, LED modules",
+                                key=f"item_spec_{idx}",
+                            )
                         with d_c2:
-                            item["delivery_address"] = st.text_input("Delivery Address / Branch Location", value=item.get("delivery_address", ""), placeholder="e.g. Salt Lake Sector V Office", key=f"item_addr_{idx}")
+                            item["delivery_address"] = st.text_input(
+                                "Delivery Address / Branch Location",
+                                value=item.get("delivery_address", ""),
+                                placeholder="e.g. Salt Lake Sector V Office",
+                                key=f"item_addr_{idx}",
+                            )
 
                 if rows_to_remove:
                     for r_idx in sorted(rows_to_remove, reverse=True):
@@ -763,7 +871,7 @@ def render(user):
 
                     prepared_items = []
                     for it in st.session_state.sales_items:
-                        size_str = f"Size: {it.get('length', 1.0)} x {it.get('breadth', 1.0)} x {it.get('height', 1.0)} {it.get('dim_unit', 'Inch')}"
+                        size_str = f"Size: {it.get('height', 1.0)} x {it.get('width', 1.0)} {it.get('dim_unit', 'Inch')}"
                         full_spec = it.get("specifications", "").strip()
                         if size_str:
                             full_spec = f"{size_str} | {full_spec}" if full_spec else size_str
@@ -790,9 +898,8 @@ def render(user):
                         st.success(f"Job Sheet #{clean_job_no} created successfully and routed to `{routed_desk}`{des_msg}!")
                         st.session_state.sales_items = [{
                             "item_name": "",
-                            "length": 1.0,
-                            "breadth": 1.0,
                             "height": 1.0,
+                            "width": 1.0,
                             "dim_unit": "Inch",
                             "quantity": 0.0,
                             "rate": 0.0,
@@ -1050,7 +1157,7 @@ def render(user):
                     def _on_sales_action_change(target_job=j):
                         t_jid = target_job["job_id"]
                         choice = st.session_state.get(f"act_drp_{t_jid}")
-                        st.session_state["sales_view_jid"] = None  # Ensure view modal never opens
+                        st.session_state["sales_view_jid"] = None
                         if choice == "Edit":
                             _clear_edit_widget_state(t_jid)
                             st.session_state["sales_edit_jid"] = t_jid
@@ -1070,7 +1177,7 @@ def render(user):
                         args=(j,),
                     )
 
-            # Open Edit Modal directly when "Edit" is selected (takes priority, no intermediate popup)
+            # Open Edit Modal directly when "Edit" is selected
             edit_jid = st.session_state.get("sales_edit_jid")
             view_jid = st.session_state.get("sales_view_jid")
 
