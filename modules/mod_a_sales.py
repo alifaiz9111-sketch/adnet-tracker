@@ -7,7 +7,6 @@ from database import (
     get_next_job_no,
     get_user_created_jobs,
     update_job_sheet_by_management,
-    delete_job_sheet,
     get_all_designers,
     log_audit,
 )
@@ -215,6 +214,11 @@ def _clear_edit_widget_state(jid):
                 del st.session_state[k]
             except Exception:
                 pass
+
+
+def _clear_active_modals():
+    st.session_state["sales_edit_jid"] = None
+    st.session_state["sales_view_jid"] = None
 
 
 # =========================================================
@@ -487,7 +491,7 @@ def _show_sales_edit_modal(j, user):
                     log_audit(user["user_id"], "JOB_EDITED", f"Updated jobsheet #{job_no}")
                     st.session_state["sales_edit_jid"] = None
                     _clear_edit_widget_state(jid)
-                    st.success(f"Jobsheet #{job_no} updated successfully.")
+                    st.session_state["sales_toast_msg"] = f"Jobsheet #{job_no} updated successfully."
                     st.rerun()
                 else:
                     st.error(f"Failed to update jobsheet: {msg}")
@@ -495,11 +499,17 @@ def _show_sales_edit_modal(j, user):
 
 def render(user):
     st.markdown(_UNIFORM_MODULE_CSS, unsafe_allow_html=True)
+
+    # Render any queued notifications safely outside widget callbacks
+    if st.session_state.get("sales_toast_msg"):
+        st.toast(st.session_state.pop("sales_toast_msg"))
+    if st.session_state.get("sales_err_msg"):
+        st.error(st.session_state.pop("sales_err_msg"))
+
     st.subheader("Module 1: Order Intake & Commercial Jobsheet Creation")
     st.caption(
         f"Sales Representative: **{user['full_name']}** | Code: `{user.get('emp_code', 'N/A')}` | Role: `{user.get('account_type')}`"
     )
-    
 
     is_management = user.get("account_type") in ["SUPER_ADMIN", "CEO", "MANAGER"]
     t_create, t_history = st.tabs(["Create New Jobsheet", "Order History & Modifications"])
@@ -795,6 +805,7 @@ def render(user):
                         st.rerun()
                     else:
                         st.error(f"Failed to create jobsheet: {msg}")
+
     # =========================================================
     # TAB 2: ORDER HISTORY & MODIFICATIONS
     # =========================================================
@@ -824,7 +835,7 @@ def render(user):
                 )
                 return True
             except Exception as e:
-                st.error(f"Failed to submit delete request for JOB-{jno_val}: {e}")
+                st.session_state["sales_err_msg"] = f"Failed to submit delete request for JOB-{jno_val}: {e}"
                 return False
 
         floor_names = {
@@ -861,6 +872,7 @@ def render(user):
         }
 
         def _reset_sales_filters():
+            _clear_active_modals()
             st.session_state["sales_search_kw"] = ""
             st.session_state["sales_floor_filter"] = "All Statuses"
             st.session_state["sales_sort_filter"] = "Recent Jobs (Newest First)"
@@ -869,12 +881,27 @@ def render(user):
         with st.container(border=True):
             f1, f2, f3, f4 = st.columns([2.5, 2.5, 2.5, 1.5])
             with f1:
-                search_kw = st.text_input("Search Orders", placeholder="Search Job No, Client, Contact...", key="sales_search_kw").strip().lower()
+                search_kw = st.text_input(
+                    "Search Orders",
+                    placeholder="Search Job No, Client, Contact...",
+                    key="sales_search_kw",
+                    on_change=_clear_active_modals,
+                ).strip().lower()
             with f2:
                 status_choices = ["All Statuses"] + list(floor_names.values())
-                sel_floor = st.selectbox("Floor Status", options=status_choices, key="sales_floor_filter")
+                sel_floor = st.selectbox(
+                    "Floor Status",
+                    options=status_choices,
+                    key="sales_floor_filter",
+                    on_change=_clear_active_modals,
+                )
             with f3:
-                sort_order = st.selectbox("Sort By", options=["Recent Jobs (Newest First)", "Oldest Jobs", "Delivery Due Soonest"], key="sales_sort_filter")
+                sort_order = st.selectbox(
+                    "Sort By",
+                    options=["Recent Jobs (Newest First)", "Oldest Jobs", "Delivery Due Soonest"],
+                    key="sales_sort_filter",
+                    on_change=_clear_active_modals,
+                )
             with f4:
                 st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
                 st.button("Reset Filters", type="secondary", use_container_width=True, key="sales_reset_btn", on_click=_reset_sales_filters)
@@ -928,13 +955,16 @@ def render(user):
         with bar_col2:
             if selected_job_ids:
                 if st.button(f"Request Delete ({len(selected_job_ids)})", type="primary", use_container_width=True, key="btn_bulk_del_req"):
+                    _clear_active_modals()
+                    sent_count = 0
                     for del_jid in selected_job_ids:
                         job_obj = next((x for x in page_records if x["job_id"] == del_jid), None)
-                        if job_obj:
-                            _submit_delete_request_to_admin(job_obj)
+                        if job_obj and _submit_delete_request_to_admin(job_obj):
+                            sent_count += 1
                         if f"tbl_chk_{del_jid}" in st.session_state:
                             del st.session_state[f"tbl_chk_{del_jid}"]
-                    st.toast(f"Deletion request for {len(selected_job_ids)} job(s) sent to Admin/CEO.")
+                    if sent_count:
+                        st.session_state["sales_toast_msg"] = f"Deletion request for {sent_count} job(s) sent to Admin/CEO."
                     st.rerun()
 
         if not page_records:
@@ -978,7 +1008,12 @@ def render(user):
                 )
 
                 with r_chk:
-                    st.checkbox(" ", key=f"tbl_chk_{jid}", label_visibility="collapsed")
+                    st.checkbox(
+                        " ",
+                        key=f"tbl_chk_{jid}",
+                        label_visibility="collapsed",
+                        on_change=_clear_active_modals,
+                    )
 
                 with r_no:
                     st.button(f"JOB-{job_no}", key=f"lnk_no_{jid}", type="tertiary", help="Click to view job details", on_click=_open_view_modal, args=(jid,))
@@ -1021,8 +1056,8 @@ def render(user):
                             st.session_state["sales_edit_jid"] = t_jid
                         elif choice == "Delete":
                             st.session_state["sales_edit_jid"] = None
-                            _submit_delete_request_to_admin(target_job)
-                            st.toast(f"Delete request for JOB-{target_job.get('job_no', t_jid)} sent to Admin/CEO.")
+                            if _submit_delete_request_to_admin(target_job):
+                                st.session_state["sales_toast_msg"] = f"Delete request for JOB-{target_job.get('job_no', t_jid)} sent to Admin/CEO."
                         st.session_state[f"act_drp_{t_jid}"] = "Select Action"
 
                     st.selectbox(
@@ -1054,6 +1089,7 @@ def render(user):
                 p_c1, p_c2, p_c3, p_c4, p_c5 = st.columns([2, 1, 2, 1, 2])
                 with p_c2:
                     if st.button("◀ Previous", disabled=(curr_page <= 1), use_container_width=True, key="sales_pg_prev"):
+                        _clear_active_modals()
                         st.session_state.sales_page_num = max(1, curr_page - 1)
                         st.rerun()
                 with p_c3:
@@ -1065,5 +1101,6 @@ def render(user):
                     )
                 with p_c4:
                     if st.button("Next ▶", disabled=(curr_page >= total_pages), use_container_width=True, key="sales_pg_next"):
+                        _clear_active_modals()
                         st.session_state.sales_page_num = min(total_pages, curr_page + 1)
                         st.rerun()
