@@ -207,6 +207,16 @@ def _sync_edit_commercials(jid, idx, trigger_field, def_l=1.0, def_b=1.0, def_h=
             st.session_state[f"ei_r_{jid}_{idx}"] = round(amt / (dim_factor * qty), 2)
 
 
+def _clear_edit_widget_state(jid):
+    prefixes = ("ed_", "ei_")
+    for k in list(st.session_state.keys()):
+        if k.startswith(prefixes) and f"_{jid}" in k:
+            try:
+                del st.session_state[k]
+            except Exception:
+                pass
+
+
 # =========================================================
 # DIALOGS: VIEW JOB DETAILS & EDIT JOBSHEET
 # =========================================================
@@ -447,6 +457,7 @@ def _show_sales_edit_modal(j, user):
     with b_col1:
         if st.button("Cancel", use_container_width=True, key=f"btn_cancel_edit_{jid}"):
             st.session_state["sales_edit_jid"] = None
+            _clear_edit_widget_state(jid)
             st.rerun()
     with b_col2:
         if st.button("Save Changes", key=f"btn_save_edit_{jid}", type="primary", use_container_width=True):
@@ -475,6 +486,7 @@ def _show_sales_edit_modal(j, user):
                 if ok:
                     log_audit(user["user_id"], "JOB_EDITED", f"Updated jobsheet #{job_no}")
                     st.session_state["sales_edit_jid"] = None
+                    _clear_edit_widget_state(jid)
                     st.success(f"Jobsheet #{job_no} updated successfully.")
                     st.rerun()
                 else:
@@ -783,7 +795,7 @@ def render(user):
                         st.rerun()
                     else:
                         st.error(f"Failed to create jobsheet: {msg}")
-# =========================================================
+    # =========================================================
     # TAB 2: ORDER HISTORY & MODIFICATIONS
     # =========================================================
     with t_history:
@@ -1005,6 +1017,7 @@ def render(user):
                         choice = st.session_state.get(f"act_drp_{t_jid}")
                         st.session_state["sales_view_jid"] = None  # Ensure view modal never opens
                         if choice == "Edit":
+                            _clear_edit_widget_state(t_jid)
                             st.session_state["sales_edit_jid"] = t_jid
                         elif choice == "Delete":
                             st.session_state["sales_edit_jid"] = None
