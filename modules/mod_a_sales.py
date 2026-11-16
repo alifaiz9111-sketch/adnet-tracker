@@ -12,6 +12,124 @@ from database import (
     log_audit,
 )
 
+# Unified Font, Size & Color across Both Tabs and All Dialogs
+_UNIFORM_MODULE_CSS = """
+    <style>
+    /* Base uniform typography for both tabs and all modals */
+    div[data-testid="stAppViewContainer"] .main p,
+    div[data-testid="stAppViewContainer"] .main span,
+    div[data-testid="stAppViewContainer"] .main label,
+    div[data-testid="stAppViewContainer"] .main input,
+    div[data-testid="stAppViewContainer"] .main textarea,
+    div[data-testid="stAppViewContainer"] .main select,
+    div[data-testid="stAppViewContainer"] .main div[data-testid="stCaptionContainer"] p,
+    div[data-testid="stAppViewContainer"] .main div[data-testid="stMarkdownContainer"] p,
+    div[data-testid="stAppViewContainer"] .main div[data-baseweb="select"] div,
+    div[data-testid="stAppViewContainer"] .main div[data-baseweb="input"] input,
+    div[data-testid="stDialog"] p,
+    div[data-testid="stDialog"] span,
+    div[data-testid="stDialog"] label,
+    div[data-testid="stDialog"] input,
+    div[data-testid="stDialog"] textarea,
+    div[data-testid="stDialog"] select,
+    div[data-testid="stDialog"] div[data-testid="stCaptionContainer"] p,
+    div[data-testid="stDialog"] div[data-testid="stMarkdownContainer"] p,
+    div[data-testid="stDialog"] div[data-baseweb="select"] div,
+    div[data-testid="stDialog"] div[data-baseweb="input"] input {
+        font-family: inherit !important;
+        font-size: 13px !important;
+        color: #1e293b !important;
+    }
+
+    /* Unified Section & Form Subheaders */
+    div[data-testid="stAppViewContainer"] .main h3,
+    div[data-testid="stAppViewContainer"] .main h4,
+    div[data-testid="stAppViewContainer"] .main h5,
+    div[data-testid="stDialog"] h3,
+    div[data-testid="stDialog"] h4,
+    div[data-testid="stDialog"] h5 {
+        font-family: inherit !important;
+        font-size: 15px !important;
+        font-weight: 700 !important;
+        color: #1e293b !important;
+    }
+
+    /* Keep status pills & primary action buttons readable */
+    div[data-testid="stAppViewContainer"] .main button[kind="primary"] p,
+    div[data-testid="stAppViewContainer"] .main button[kind="primary"] span,
+    div[data-testid="stDialog"] button[kind="primary"] p,
+    div[data-testid="stDialog"] button[kind="primary"] span {
+        color: #ffffff !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+    }
+
+    /* Stepper Rail Styles */
+    .stepper-container { display: flex; flex-direction: column; gap: 12px; padding-top: 10px; }
+    .stepper-item { display: flex; align-items: center; gap: 12px; font-size: 13px !important; font-weight: 500; color: #1e293b !important; }
+    .stepper-item.active { color: #1e293b !important; font-weight: 700; }
+    .step-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #475569; background-color: transparent; display: inline-block; }
+    .step-dot.active { background-color: #E11D48; border-color: #E11D48; box-shadow: 0 0 10px rgba(225, 29, 72, 0.5); }
+    .step-line { width: 2px; height: 32px; background-color: #334155; margin-left: 6px; }
+    .step-line.active { background-color: #E11D48; }
+
+    /* Table Header & Cell Styles */
+    .tbl-cell-text {
+        font-size: 13px !important;
+        font-family: inherit !important;
+        color: #1e293b !important;
+        font-weight: 500 !important;
+        line-height: 1.4 !important;
+        padding-top: 8px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .tbl-cell-header {
+        font-size: 13px !important;
+        font-family: inherit !important;
+        font-weight: 700 !important;
+        color: #1e293b !important;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+    }
+    .adnet-progress-circle-red {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px !important;
+        font-weight: 700;
+        margin: auto;
+    }
+
+    /* Flat clickable text styling in History Table */
+    div[data-testid="stHorizontalBlock"] button[kind="tertiary"],
+    div[data-testid="stHorizontalBlock"] button[kind="secondary"] {
+        border: none !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        padding: 6px 0 !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        color: #1e293b !important;
+        text-align: left !important;
+        justify-content: flex-start !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+    div[data-testid="stHorizontalBlock"] button[kind="tertiary"]:hover,
+    div[data-testid="stHorizontalBlock"] button[kind="secondary"]:hover {
+        color: #E11D48 !important;
+        text-decoration: underline !important;
+        background: transparent !important;
+    }
+    </style>
+"""
+
 
 def _sync_commercials(idx, trigger_field):
     item = st.session_state.sales_items[idx]
@@ -95,6 +213,7 @@ def _sync_edit_commercials(jid, idx, trigger_field, def_l=1.0, def_b=1.0, def_h=
 # =========================================================
 @st.dialog("Jobsheet Details")
 def _show_sales_job_details_modal(job, floor_names):
+    st.markdown(_UNIFORM_MODULE_CSS, unsafe_allow_html=True)
     jid = job["job_id"]
     job_no = job.get("job_no", str(jid))
     items = get_job_items(jid) or []
@@ -136,7 +255,7 @@ def _show_sales_job_details_modal(job, floor_names):
                     st.caption(f"Delivery: {it.get('delivery_address')}")
             with ic2:
                 st.markdown(
-                    f"<div style='text-align: right; font-size: 13px;'>"
+                    f"<div style='text-align: right; font-size: 13px; color: #1e293b;'>"
                     f"Qty: <b>{it.get('quantity')} {it.get('unit', 'Pcs')}</b><br>"
                     f"Rate: ₹{float(it.get('rate', 0)):,.2f}<br>"
                     f"<b>Total: ₹{float(it.get('amount', 0)):,.2f}</b>"
@@ -151,8 +270,8 @@ def _show_sales_job_details_modal(job, floor_names):
 
 
 @st.dialog("Edit Jobsheet")
-
 def _show_sales_edit_modal(j, user):
+    st.markdown(_UNIFORM_MODULE_CSS, unsafe_allow_html=True)
     jid = j["job_id"]
     job_no = j.get("job_no", str(jid))
     st.markdown(f"#### Edit Jobsheet #{job_no}")
@@ -364,6 +483,7 @@ def _show_sales_edit_modal(j, user):
 
 
 def render(user):
+    st.markdown(_UNIFORM_MODULE_CSS, unsafe_allow_html=True)
     st.subheader("Module 1: Order Intake & Commercial Jobsheet Creation")
     st.caption(
         f"Sales Representative: **{user['full_name']}** | Code: `{user.get('emp_code', 'N/A')}` | Role: `{user.get('account_type')}`"
@@ -376,18 +496,6 @@ def render(user):
     # TAB 1: CREATE NEW JOBSHEET
     # =========================================================
     with t_create:
-        st.markdown("""
-            <style>
-            .stepper-container { display: flex; flex-direction: column; gap: 12px; padding-top: 10px; }
-            .stepper-item { display: flex; align-items: center; gap: 12px; font-size: 13px; font-weight: 500; color: #94a3b8; }
-            .stepper-item.active { color: #f8fafc; font-weight: 600; }
-            .step-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #475569; background-color: transparent; display: inline-block; }
-            .step-dot.active { background-color: #E11D48; border-color: #E11D48; box-shadow: 0 0 10px rgba(225, 29, 72, 0.5); }
-            .step-line { width: 2px; height: 32px; background-color: #334155; margin-left: 6px; }
-            .step-line.active { background-color: #E11D48; }
-            </style>
-        """, unsafe_allow_html=True)
-
         suggested_no = get_next_job_no()
         if "s_manual_job_no" not in st.session_state:
             st.session_state["s_manual_job_no"] = str(suggested_no)
@@ -588,8 +696,8 @@ def render(user):
                 sub_col1, sub_col2 = st.columns([7, 3])
                 with sub_col1:
                     st.markdown(
-                        f"<div style='font-size: 20px; font-weight: 700; color: #f8fafc; padding-top: 6px;'>"
-                        f"Grand Total Order Value: <span style='color: #ffffff;'>INR {grand_total:,.2f}</span>"
+                        f"<div style='font-size: 15px; font-weight: 700; color: #1e293b; padding-top: 6px;'>"
+                        f"Grand Total Order Value: <span style='color: #1e293b;'>INR {grand_total:,.2f}</span>"
                         f"</div>",
                         unsafe_allow_html=True,
                     )
@@ -677,7 +785,7 @@ def render(user):
                         st.error(f"Failed to create jobsheet: {msg}")
 
     # =========================================================
-    # TAB 2: ORDER HISTORY & MODIFICATIONS (CLICKABLE TEXT + CLEAN MODALS)
+    # TAB 2: ORDER HISTORY & MODIFICATIONS
     # =========================================================
     with t_history:
         my_jobs = get_user_created_jobs(user["full_name"], is_management=is_management) or []
@@ -791,63 +899,6 @@ def render(user):
             st.info("No matching job orders found.")
         else:
             st.markdown("""
-                <style>
-                .tbl-cell-text {
-                    font-size: 13px !important;
-                    font-family: inherit !important;
-                    color: #1e293b !important;
-                    font-weight: 500 !important;
-                    line-height: 1.4 !important;
-                    padding-top: 8px;
-                    white-space: nowrap;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                }
-                .tbl-cell-header {
-                    font-size: 13px !important;
-                    font-family: inherit !important;
-                    font-weight: 700 !important;
-                    color: #475569 !important;
-                    letter-spacing: 0.3px;
-                    text-transform: uppercase;
-                }
-                .adnet-progress-circle-red {
-                    width: 36px;
-                    height: 36px;
-                    border-radius: 50%;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 11px;
-                    font-weight: 700;
-                    margin: auto;
-                }
-                /* Flat clickable text styling (no button borders/background) */
-                div[data-testid="stHorizontalBlock"] button[kind="tertiary"],
-                div[data-testid="stHorizontalBlock"] button[kind="secondary"] {
-                    border: none !important;
-                    background: transparent !important;
-                    box-shadow: none !important;
-                    padding: 6px 0 !important;
-                    font-size: 13px !important;
-                    font-weight: 600 !important;
-                    color: #1e293b !important;
-                    text-align: left !important;
-                    justify-content: flex-start !important;
-                    white-space: nowrap !important;
-                    overflow: hidden !important;
-                    text-overflow: ellipsis !important;
-                }
-                div[data-testid="stHorizontalBlock"] button[kind="tertiary"]:hover,
-                div[data-testid="stHorizontalBlock"] button[kind="secondary"]:hover {
-                    color: #E11D48 !important;
-                    text-decoration: underline !important;
-                    background: transparent !important;
-                }
-                </style>
-            """, unsafe_allow_html=True)
-
-            st.markdown("""
                 <div class="adnet-table-header" style="padding: 10px 14px;">
                     <div style="display: grid; grid-template-columns: 0.3fr 1fr 1fr 1.8fr 1.6fr 1.1fr 0.9fr 1.3fr 1.6fr; align-items: center; gap: 8px;">
                         <div class="tbl-cell-header">&nbsp;</div>
@@ -906,7 +957,7 @@ def render(user):
                 with r_prog:
                     st.markdown(
                         f"<div class='adnet-progress-circle-red' style='background: conic-gradient(#E11D48 {pct}%, #e2e8f0 0); border: 2px solid #ffffff;'>"
-                        f"<div style='background: #ffffff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #BE123C; font-size: 10px; font-weight: 700;'>"
+                        f"<div style='background: #ffffff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #1e293b; font-size: 10px; font-weight: 700;'>"
                         f"{pct}%</div></div>",
                         unsafe_allow_html=True,
                     )
@@ -958,6 +1009,7 @@ def render(user):
                 if target_job:
                     @st.dialog("Confirm Delete Jobsheet")
                     def _confirm_single_delete(job_obj):
+                        st.markdown(_UNIFORM_MODULE_CSS, unsafe_allow_html=True)
                         jno = job_obj.get("job_no", str(job_obj["job_id"]))
                         st.warning(f"Permanently delete Job #{jno} ({job_obj.get('client_name', '')})?")
                         dc1, dc2 = st.columns(2)
@@ -985,7 +1037,7 @@ def render(user):
                         st.rerun()
                 with p_c3:
                     st.markdown(
-                        f"<div style='text-align: center; padding-top: 6px; font-size: 14px; font-weight: 600; color: #475569;'>"
+                        f"<div style='text-align: center; padding-top: 6px; font-size: 13px; font-weight: 600; color: #1e293b;'>"
                         f"Page {curr_page} of {total_pages}"
                         f"</div>",
                         unsafe_allow_html=True,
