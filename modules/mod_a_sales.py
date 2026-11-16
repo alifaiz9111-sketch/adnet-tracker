@@ -93,30 +93,29 @@ def _sync_edit_commercials(jid, idx, trigger_field, def_l=1.0, def_b=1.0, def_h=
 # =========================================================
 # DIALOGS: VIEW JOB DETAILS & EDIT JOBSHEET
 # =========================================================
-@st.dialog("Jobsheet Details", width="large")
+@st.dialog("Jobsheet Details")
 def _show_sales_job_details_modal(job, floor_names):
     jid = job["job_id"]
     job_no = job.get("job_no", str(jid))
     items = get_job_items(jid) or []
     total_val = sum(float(it.get("amount", 0) or 0) for it in items)
 
-    st.markdown(f"### JOB-{job_no} — {job.get('client_name', 'N/A')}")
     stg_clean = floor_names.get(job.get("current_stage", "DESIGN"), job.get("current_stage", "DESIGN"))
-    st.caption(
-        f"**Status:** `{stg_clean}` | **Booked Date:** `{str(job.get('created_at', ''))[:10] or 'N/A'}` | "
-        f"**Due Date:** `{job.get('due_date') or 'N/A'}`"
-    )
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(f"**Job No:** `JOB-{job_no}`")
+        st.markdown(f"**Client:** {job.get('client_name') or 'N/A'}")
+        st.caption(f"Contact Person: {job.get('contact_person') or 'N/A'}")
+        st.caption(f"Phone: {job.get('contact_phone') or 'N/A'}")
+    with c2:
+        st.markdown(f"**Target Due Date:** {job.get('due_date') or 'N/A'}")
+        st.markdown(f"**Booked Date:** {str(job.get('created_at', ''))[:10] or 'N/A'}")
+        st.caption(f"Current Floor: `{stg_clean}`")
+        st.caption(f"Billing: `{'GST Tax Invoice' if job.get('billing_type') == 'GST' else 'Non-GST Bill'}`")
 
     if job.get("is_returned"):
-        st.error(f"Returned by {job.get('returned_by', 'Floor')}: {job.get('return_reason', '')}")
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown(f"**Contact Person:**\n{job.get('contact_person') or 'N/A'}")
-    with c2:
-        st.markdown(f"**Phone:**\n{job.get('contact_phone') or 'N/A'}")
-    with c3:
-        st.markdown(f"**Billing Mode:**\n{'GST Tax Invoice' if job.get('billing_type') == 'GST' else 'Non-GST Bill'}")
+        st.error(f"Return / Flagged Notice ({job.get('returned_by', 'Floor')}): {job.get('return_reason', '')}")
 
     if job.get("billing_type") == "GST":
         st.caption(f"**GSTIN:** `{job.get('gstin') or 'N/A'}` | **Place of Supply:** `{job.get('place_of_supply') or 'N/A'}`")
@@ -125,36 +124,33 @@ def _show_sales_job_details_modal(job, floor_names):
 
     st.markdown("---")
     st.markdown("##### Line Items & Specifications")
-    for idx, it in enumerate(items, 1):
-        with st.container(border=True):
-            ic1, ic2 = st.columns([7, 3])
-            with ic1:
-                st.markdown(f"**{idx}. {it.get('item_name')}**")
-                if it.get("specifications"):
-                    st.caption(f"Specs: {it.get('specifications')}")
-                if it.get("delivery_address"):
-                    st.caption(f"Delivery: {it.get('delivery_address')}")
-            with ic2:
-                st.markdown(
-                    f"<div style='text-align: right; font-size: 13px;'>"
-                    f"Qty: <b>{it.get('quantity')} {it.get('unit', 'Pcs')}</b><br>"
-                    f"Rate: ₹{float(it.get('rate', 0)):,.2f}<br>"
-                    f"<b>Total: ₹{float(it.get('amount', 0)):,.2f}</b>"
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
 
-    st.markdown(f"#### Grand Total: ₹ {total_val:,.2f}")
+    if not items:
+        st.info("No line items logged for this order.")
+    else:
+        for idx, it in enumerate(items, 1):
+            with st.container(border=True):
+                st.markdown(
+                    f"**{idx}. {it.get('item_name')}** — Qty: `{it.get('quantity')} {it.get('unit', 'Pcs')}` "
+                    f"@ ₹{float(it.get('rate', 0)):,.2f} = **₹{float(it.get('amount', 0)):,.2f}**"
+                )
+                spec_text = it.get("specifications") or "No technical notes entered."
+                st.caption("Technical Notes / Sizes:")
+                st.code(spec_text, language="markdown")
+                if it.get("delivery_address"):
+                    st.caption(f"Destination: {it.get('delivery_address')}")
+
+    st.markdown(f"**Grand Total Order Value:** `INR {total_val:,.2f}`")
     if st.button("Close", use_container_width=True, key=f"cls_view_sales_{jid}"):
         st.session_state["sales_view_jid"] = None
         st.rerun()
 
 
-@st.dialog("Edit Jobsheet", width="large")
+@st.dialog("Edit Jobsheet")
 def _show_sales_edit_modal(j, user):
     jid = j["job_id"]
     job_no = j.get("job_no", str(jid))
-    st.markdown(f"#### Edit Jobsheet #{job_no}")
+    st.markdown(f"**Editing Jobsheet:** `JOB-{job_no}`")
     items = get_job_items(jid) or []
 
     is_currently_gst = j.get("billing_type") == "GST"
@@ -228,88 +224,29 @@ def _show_sales_edit_modal(j, user):
             def_q = float(it.get("quantity", 1.0))
             def_r = float(it.get("rate", 0.0))
 
-            st.caption("Sizes / Dimensions (Default: 1 x 1 x 1):")
+            st.caption("Sizes / Dimensions:")
             ed_s1, ed_s2, ed_s3, ed_s4 = st.columns(4)
             with ed_s1:
-                ei_l = st.number_input(
-                    "Length (L)",
-                    min_value=0.0,
-                    value=def_l,
-                    step=1.0,
-                    key=f"ei_l_{jid}_{idx}",
-                    on_change=_sync_edit_commercials,
-                    args=(jid, idx, "dim", def_l, def_b, def_h, def_q, def_r),
-                )
+                ei_l = st.number_input("L", min_value=0.0, value=def_l, step=1.0, key=f"ei_l_{jid}_{idx}", on_change=_sync_edit_commercials, args=(jid, idx, "dim", def_l, def_b, def_h, def_q, def_r))
             with ed_s2:
-                ei_b = st.number_input(
-                    "Breadth / Width (B)",
-                    min_value=0.0,
-                    value=def_b,
-                    step=1.0,
-                    key=f"ei_b_{jid}_{idx}",
-                    on_change=_sync_edit_commercials,
-                    args=(jid, idx, "dim", def_l, def_b, def_h, def_q, def_r),
-                )
+                ei_b = st.number_input("B", min_value=0.0, value=def_b, step=1.0, key=f"ei_b_{jid}_{idx}", on_change=_sync_edit_commercials, args=(jid, idx, "dim", def_l, def_b, def_h, def_q, def_r))
             with ed_s3:
-                ei_h = st.number_input(
-                    "Height / Depth (H)",
-                    min_value=0.0,
-                    value=def_h,
-                    step=0.5,
-                    key=f"ei_h_{jid}_{idx}",
-                    on_change=_sync_edit_commercials,
-                    args=(jid, idx, "dim", def_l, def_b, def_h, def_q, def_r),
-                )
+                ei_h = st.number_input("H", min_value=0.0, value=def_h, step=0.5, key=f"ei_h_{jid}_{idx}", on_change=_sync_edit_commercials, args=(jid, idx, "dim", def_l, def_b, def_h, def_q, def_r))
             with ed_s4:
                 unit_opts = ["Inch", "Ft"]
                 u_idx = unit_opts.index(def_u) if def_u in unit_opts else 0
-                ei_unit = st.selectbox("Size Unit", unit_opts, index=u_idx, key=f"ei_u_{jid}_{idx}")
+                ei_unit = st.selectbox("Unit", unit_opts, index=u_idx, key=f"ei_u_{jid}_{idx}")
 
-            st.caption("Commercials (Fill any 2 fields to auto-calculate the 3rd):")
             iq1, iq2, iq3 = st.columns(3)
             with iq1:
-                ei_qty = st.number_input(
-                    "Quantity",
-                    value=def_q,
-                    min_value=0.0,
-                    step=1.0,
-                    key=f"ei_q_{jid}_{idx}",
-                    on_change=_sync_edit_commercials,
-                    args=(jid, idx, "qty", def_l, def_b, def_h, def_q, def_r),
-                )
+                ei_qty = st.number_input("Qty", value=def_q, min_value=0.0, step=1.0, key=f"ei_q_{jid}_{idx}", on_change=_sync_edit_commercials, args=(jid, idx, "qty", def_l, def_b, def_h, def_q, def_r))
             with iq2:
-                ei_rate = st.number_input(
-                    "Rate (INR)",
-                    value=def_r,
-                    min_value=0.0,
-                    step=10.0,
-                    key=f"ei_r_{jid}_{idx}",
-                    on_change=_sync_edit_commercials,
-                    args=(jid, idx, "rate", def_l, def_b, def_h, def_q, def_r),
-                )
+                ei_rate = st.number_input("Rate (INR)", value=def_r, min_value=0.0, step=10.0, key=f"ei_r_{jid}_{idx}", on_change=_sync_edit_commercials, args=(jid, idx, "rate", def_l, def_b, def_h, def_q, def_r))
             with iq3:
-                ei_amt = st.number_input(
-                    "Total Amount (INR)",
-                    value=float(it.get("amount", 0.0)),
-                    min_value=0.0,
-                    step=50.0,
-                    key=f"ei_amt_{jid}_{idx}",
-                    on_change=_sync_edit_commercials,
-                    args=(jid, idx, "amount", def_l, def_b, def_h, def_q, def_r),
-                )
+                ei_amt = st.number_input("Amount (INR)", value=float(it.get("amount", 0.0)), min_value=0.0, step=50.0, key=f"ei_amt_{jid}_{idx}", on_change=_sync_edit_commercials, args=(jid, idx, "amount", def_l, def_b, def_h, def_q, def_r))
 
-            ei_spec_notes = st.text_input(
-                "Technical Specifications / Material Notes",
-                value=def_notes,
-                placeholder="e.g. 5mm Clear Acrylic, 3M vinyl",
-                key=f"ei_sp_{jid}_{idx}",
-            )
-
-            ei_addr = st.text_input(
-                "Delivery Destination",
-                value=it.get("delivery_address", ""),
-                key=f"ei_ad_{jid}_{idx}",
-            )
+            ei_spec_notes = st.text_input("Technical Specifications / Material Notes", value=def_notes, placeholder="e.g. 5mm Clear Acrylic, 3M vinyl", key=f"ei_sp_{jid}_{idx}")
+            ei_addr = st.text_input("Delivery Destination", value=it.get("delivery_address", ""), key=f"ei_ad_{jid}_{idx}")
 
             size_str = f"Size: {ei_l} x {ei_b} x {ei_h} {ei_unit}"
             full_spec = f"{size_str} | {ei_spec_notes.strip()}" if ei_spec_notes.strip() else size_str
@@ -324,7 +261,7 @@ def _show_sales_edit_modal(j, user):
                 "delivery_address": ei_addr.strip(),
             })
 
-    b_col1, b_col2 = st.columns([1, 1])
+    b_col1, b_col2 = st.columns(2)
     with b_col1:
         if st.button("Cancel", use_container_width=True, key=f"btn_cancel_edit_{jid}"):
             st.session_state["sales_edit_jid"] = None
