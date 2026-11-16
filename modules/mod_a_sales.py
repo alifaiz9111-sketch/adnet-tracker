@@ -94,6 +94,27 @@ def _sync_edit_commercials(jid, idx, trigger_field, def_l=1.0, def_b=1.0, def_h=
 # DIALOGS: VIEW JOB DETAILS & EDIT JOBSHEET
 # =========================================================
 @st.dialog("Jobsheet Details")
+st.markdown("""
+    <style>
+    div[data-testid="stDialog"] p,
+    div[data-testid="stDialog"] span,
+    div[data-testid="stDialog"] label,
+    div[data-testid="stDialog"] div[data-testid="stCaptionContainer"] p,
+    div[data-testid="stDialog"] div[data-testid="stMarkdownContainer"] p,
+    div[data-testid="stDialog"] input,
+    div[data-testid="stDialog"] select {
+        font-size: 13px !important;
+        color: #1e293b !important;
+    }
+    div[data-testid="stDialog"] h3,
+    div[data-testid="stDialog"] h4,
+    div[data-testid="stDialog"] h5 {
+        font-size: 15px !important;
+        color: #1e293b !important;
+        font-weight: 700 !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 def _show_sales_job_details_modal(job, floor_names):
     jid = job["job_id"]
     job_no = job.get("job_no", str(jid))
@@ -151,6 +172,27 @@ def _show_sales_job_details_modal(job, floor_names):
 
 
 @st.dialog("Edit Jobsheet")
+st.markdown("""
+    <style>
+    div[data-testid="stDialog"] p,
+    div[data-testid="stDialog"] span,
+    div[data-testid="stDialog"] label,
+    div[data-testid="stDialog"] div[data-testid="stCaptionContainer"] p,
+    div[data-testid="stDialog"] div[data-testid="stMarkdownContainer"] p,
+    div[data-testid="stDialog"] input,
+    div[data-testid="stDialog"] select {
+        font-size: 13px !important;
+        color: #1e293b !important;
+    }
+    div[data-testid="stDialog"] h3,
+    div[data-testid="stDialog"] h4,
+    div[data-testid="stDialog"] h5 {
+        font-size: 15px !important;
+        color: #1e293b !important;
+        font-weight: 700 !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 def _show_sales_edit_modal(j, user):
     jid = j["job_id"]
     job_no = j.get("job_no", str(jid))
