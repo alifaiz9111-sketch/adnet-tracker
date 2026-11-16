@@ -696,11 +696,11 @@ def render(user):
         stage_progress = {
             "DESIGN": 15,
             "PAYMENT": 30,
-            "PRODUCTION": 50,
-            "QC": 75,
-            "DISPATCH": 90,
-            "BILLING_REVIEW": 100,
-            "BILLING": 100,
+            "PRODUCTION": 45,
+            "QC": 60,
+            "DISPATCH": 65,
+            "BILLING_REVIEW": 70,
+            "BILLING": 85,
             "SETTLED": 100,
         }
 
