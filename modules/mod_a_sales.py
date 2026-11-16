@@ -487,11 +487,7 @@ def render(user):
     st.caption(
         f"Sales Representative: **{user['full_name']}** | Code: `{user.get('emp_code', 'N/A')}` | Role: `{user.get('account_type')}`"
     )
-    def _clear_edit_widget_state(jid):
-    prefixes = (f"ed_", f"ei_")
-    for k in list(st.session_state.keys()):
-        if k.startswith(prefixes) and f"_{jid}" in k:
-            del st.session_state[k]
+    
 
     is_management = user.get("account_type") in ["SUPER_ADMIN", "CEO", "MANAGER"]
     t_create, t_history = st.tabs(["Create New Jobsheet", "Order History & Modifications"])
