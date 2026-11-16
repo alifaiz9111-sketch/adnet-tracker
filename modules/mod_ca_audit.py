@@ -478,7 +478,6 @@ def render(user):
                             if st.button("Complete & Move to Completed", key=f"btn_ca_complete_{jid}", type="primary", use_container_width=True):
                                 _clear_active_modals()
                                 try:
-                                    # Optional: Handle file uploads to storage bucket if needed
                                     supabase.table("jobs").update({"is_billed": True}).eq("job_id", int(jid)).execute()
                                     log_audit(user["user_id"], "CA_AUDIT_COMPLETED", f"Completed audit for JOB-{job_no} with {len(uploaded_files) if uploaded_files else 0} file(s)")
                                     st.session_state["ca_toast_msg"] = f"JOB-{job_no} marked as Completed and moved to archive."
