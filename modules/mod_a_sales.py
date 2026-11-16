@@ -9,9 +9,7 @@ from database import (
     update_job_sheet_by_management,
     delete_job_sheet,
     get_all_designers,
-    approve_and_forward_job,
     log_audit,
-    supabase,
 )
 
 
@@ -74,14 +72,14 @@ def _parse_spec_dimensions(spec_str):
     return 1.0, 1.0, 1.0, "Inch", spec_str.strip()
 
 
-def _sync_edit_commercials(jid, idx, trigger_field):
-    l_val = float(st.session_state.get(f"ei_l_{jid}_{idx}", 1.0))
-    b_val = float(st.session_state.get(f"ei_b_{jid}_{idx}", 1.0))
-    h_val = float(st.session_state.get(f"ei_h_{jid}_{idx}", 1.0))
+def _sync_edit_commercials(jid, idx, trigger_field, def_l=1.0, def_b=1.0, def_h=1.0, def_q=1.0, def_r=0.0):
+    l_val = float(st.session_state.get(f"ei_l_{jid}_{idx}", def_l))
+    b_val = float(st.session_state.get(f"ei_b_{jid}_{idx}", def_b))
+    h_val = float(st.session_state.get(f"ei_h_{jid}_{idx}", def_h))
     dim_factor = (l_val if l_val > 0 else 1.0) * (b_val if b_val > 0 else 1.0) * (h_val if h_val > 0 else 1.0)
 
-    qty = float(st.session_state.get(f"ei_q_{jid}_{idx}", 1.0))
-    rate = float(st.session_state.get(f"ei_r_{jid}_{idx}", 0.0))
+    qty = float(st.session_state.get(f"ei_q_{jid}_{idx}", def_q))
+    rate = float(st.session_state.get(f"ei_r_{jid}_{idx}", def_r))
     amt = float(st.session_state.get(f"ei_amt_{jid}_{idx}", 0.0))
 
     if trigger_field in ["dim", "qty", "rate"]:
@@ -90,6 +88,278 @@ def _sync_edit_commercials(jid, idx, trigger_field):
     elif trigger_field == "amount":
         if qty > 0 and dim_factor > 0:
             st.session_state[f"ei_r_{jid}_{idx}"] = round(amt / (dim_factor * qty), 2)
+
+
+# =========================================================
+# DIALOGS: VIEW JOB DETAILS & EDIT JOBSHEET
+# =========================================================
+@st.dialog("Jobsheet Details", width="large")
+def _show_sales_job_details_modal(job, floor_names):
+    jid = job["job_id"]
+    job_no = job.get("job_no", str(jid))
+    items = get_job_items(jid) or []
+    total_val = sum(float(it.get("amount", 0) or 0) for it in items)
+
+    st.markdown(f"### JOB-{job_no} — {job.get('client_name', 'N/A')}")
+    stg_clean = floor_names.get(job.get("current_stage", "DESIGN"), job.get("current_stage", "DESIGN"))
+    st.caption(
+        f"**Status:** `{stg_clean}` | **Booked Date:** `{str(job.get('created_at', ''))[:10] or 'N/A'}` | "
+        f"**Due Date:** `{job.get('due_date') or 'N/A'}`"
+    )
+
+    if job.get("is_returned"):
+        st.error(f"Returned by {job.get('returned_by', 'Floor')}: {job.get('return_reason', '')}")
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown(f"**Contact Person:**\n{job.get('contact_person') or 'N/A'}")
+    with c2:
+        st.markdown(f"**Phone:**\n{job.get('contact_phone') or 'N/A'}")
+    with c3:
+        st.markdown(f"**Billing Mode:**\n{'GST Tax Invoice' if job.get('billing_type') == 'GST' else 'Non-GST Bill'}")
+
+    if job.get("billing_type") == "GST":
+        st.caption(f"**GSTIN:** `{job.get('gstin') or 'N/A'}` | **Place of Supply:** `{job.get('place_of_supply') or 'N/A'}`")
+    if job.get("billing_address"):
+        st.caption(f"**Billing Address:** {job.get('billing_address')}")
+
+    st.markdown("---")
+    st.markdown("##### Line Items & Specifications")
+    for idx, it in enumerate(items, 1):
+        with st.container(border=True):
+            ic1, ic2 = st.columns([7, 3])
+            with ic1:
+                st.markdown(f"**{idx}. {it.get('item_name')}**")
+                if it.get("specifications"):
+                    st.caption(f"Specs: {it.get('specifications')}")
+                if it.get("delivery_address"):
+                    st.caption(f"Delivery: {it.get('delivery_address')}")
+            with ic2:
+                st.markdown(
+                    f"<div style='text-align: right; font-size: 13px;'>"
+                    f"Qty: <b>{it.get('quantity')} {it.get('unit', 'Pcs')}</b><br>"
+                    f"Rate: ₹{float(it.get('rate', 0)):,.2f}<br>"
+                    f"<b>Total: ₹{float(it.get('amount', 0)):,.2f}</b>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+    st.markdown(f"#### Grand Total: ₹ {total_val:,.2f}")
+    if st.button("Close", use_container_width=True, key=f"cls_view_sales_{jid}"):
+        st.session_state["sales_view_jid"] = None
+        st.rerun()
+
+
+@st.dialog("Edit Jobsheet", width="large")
+def _show_sales_edit_modal(j, user):
+    jid = j["job_id"]
+    job_no = j.get("job_no", str(jid))
+    st.markdown(f"#### Edit Jobsheet #{job_no}")
+    items = get_job_items(jid) or []
+
+    is_currently_gst = j.get("billing_type") == "GST"
+    ed_billing_choice = st.radio(
+        "Billing Classification *",
+        options=["Non-GST Bill", "GST Invoice (B2B Tax Invoice)"],
+        index=1 if is_currently_gst else 0,
+        horizontal=True,
+        key=f"ed_bchoice_{jid}",
+    )
+    ed_is_gst = "GST Invoice" in ed_billing_choice
+
+    ed_client = st.text_input("Client / Corporate Entity *", value=j.get("client_name") or "", key=f"ed_cl_{jid}").strip()
+    ec1, ec2 = st.columns(2)
+    with ec1:
+        ed_contact = st.text_input("Contact Person", value=j.get("contact_person") or "", key=f"ed_cp_{jid}").strip()
+    with ec2:
+        ed_phone = st.text_input("Contact Phone", value=j.get("contact_phone") or "", key=f"ed_ph_{jid}").strip()
+
+    cur_due = date.today()
+    if j.get("due_date"):
+        try:
+            cur_due = datetime.strptime(str(j.get("due_date")), "%Y-%m-%d").date()
+        except Exception:
+            cur_due = date.today()
+
+    ed1, ed2 = st.columns(2)
+    with ed1:
+        ed_due = st.date_input("Target Delivery Date *", value=cur_due, key=f"ed_due_{jid}")
+    with ed2:
+        stage_list = ["DESIGN", "PAYMENT", "PRODUCTION", "QC", "DISPATCH", "BILLING_REVIEW", "SETTLED"]
+        cur_st_idx = stage_list.index(j.get("current_stage")) if j.get("current_stage") in stage_list else 0
+        ed_stage = st.selectbox("Routing Stage *", stage_list, index=cur_st_idx, key=f"ed_stg_{jid}")
+
+    ed_designer = None
+    if ed_stage == "DESIGN":
+        designers_all = get_all_designers()
+        d_names = ["OPEN_POOL"] + [d["full_name"] for d in designers_all]
+        cur_des = j.get("assigned_designer") or "OPEN_POOL"
+        d_idx = d_names.index(cur_des) if cur_des in d_names else 0
+        ed_designer = st.selectbox("Assigned Designer *", options=d_names, index=d_idx, key=f"ed_des_{jid}")
+
+    ed_gstin = j.get("gstin", "") or ""
+    ed_baddr = j.get("billing_address", "") or ""
+    ed_pos = j.get("place_of_supply", "19 - West Bengal") or "19 - West Bengal"
+
+    if ed_is_gst:
+        eg1, eg2 = st.columns(2)
+        with eg1:
+            ed_gstin = st.text_input("Client GSTIN *", value=ed_gstin, key=f"ed_gstin_{jid}").strip().upper()
+        with eg2:
+            pos_opts = ["19 - West Bengal", "10 - Bihar", "20 - Jharkhand", "21 - Odisha", "18 - Assam", "07 - Delhi", "27 - Maharashtra", "Other State"]
+            pos_idx = pos_opts.index(ed_pos) if ed_pos in pos_opts else 0
+            ed_pos = st.selectbox("Place of Supply *", pos_opts, index=pos_idx, key=f"ed_pos_{jid}")
+
+    ed_baddr = st.text_input(
+        "Billing Address" + (" *" if ed_is_gst else " (Optional)"),
+        value=ed_baddr,
+        key=f"ed_baddr_{jid}",
+    ).strip()
+
+    st.markdown("---")
+    st.markdown("##### Ordered Line Items & Deliverables")
+    edited_items = []
+    for idx, it in enumerate(items):
+        with st.container(border=True):
+            st.caption(f"Item #{idx+1}")
+            ei_name = st.text_input("Item Name *", value=it.get("item_name", ""), key=f"ei_nm_{jid}_{idx}")
+
+            def_l, def_b, def_h, def_u, def_notes = _parse_spec_dimensions(it.get("specifications", ""))
+            def_q = float(it.get("quantity", 1.0))
+            def_r = float(it.get("rate", 0.0))
+
+            st.caption("Sizes / Dimensions (Default: 1 x 1 x 1):")
+            ed_s1, ed_s2, ed_s3, ed_s4 = st.columns(4)
+            with ed_s1:
+                ei_l = st.number_input(
+                    "Length (L)",
+                    min_value=0.0,
+                    value=def_l,
+                    step=1.0,
+                    key=f"ei_l_{jid}_{idx}",
+                    on_change=_sync_edit_commercials,
+                    args=(jid, idx, "dim", def_l, def_b, def_h, def_q, def_r),
+                )
+            with ed_s2:
+                ei_b = st.number_input(
+                    "Breadth / Width (B)",
+                    min_value=0.0,
+                    value=def_b,
+                    step=1.0,
+                    key=f"ei_b_{jid}_{idx}",
+                    on_change=_sync_edit_commercials,
+                    args=(jid, idx, "dim", def_l, def_b, def_h, def_q, def_r),
+                )
+            with ed_s3:
+                ei_h = st.number_input(
+                    "Height / Depth (H)",
+                    min_value=0.0,
+                    value=def_h,
+                    step=0.5,
+                    key=f"ei_h_{jid}_{idx}",
+                    on_change=_sync_edit_commercials,
+                    args=(jid, idx, "dim", def_l, def_b, def_h, def_q, def_r),
+                )
+            with ed_s4:
+                unit_opts = ["Inch", "Ft"]
+                u_idx = unit_opts.index(def_u) if def_u in unit_opts else 0
+                ei_unit = st.selectbox("Size Unit", unit_opts, index=u_idx, key=f"ei_u_{jid}_{idx}")
+
+            st.caption("Commercials (Fill any 2 fields to auto-calculate the 3rd):")
+            iq1, iq2, iq3 = st.columns(3)
+            with iq1:
+                ei_qty = st.number_input(
+                    "Quantity",
+                    value=def_q,
+                    min_value=0.0,
+                    step=1.0,
+                    key=f"ei_q_{jid}_{idx}",
+                    on_change=_sync_edit_commercials,
+                    args=(jid, idx, "qty", def_l, def_b, def_h, def_q, def_r),
+                )
+            with iq2:
+                ei_rate = st.number_input(
+                    "Rate (INR)",
+                    value=def_r,
+                    min_value=0.0,
+                    step=10.0,
+                    key=f"ei_r_{jid}_{idx}",
+                    on_change=_sync_edit_commercials,
+                    args=(jid, idx, "rate", def_l, def_b, def_h, def_q, def_r),
+                )
+            with iq3:
+                ei_amt = st.number_input(
+                    "Total Amount (INR)",
+                    value=float(it.get("amount", 0.0)),
+                    min_value=0.0,
+                    step=50.0,
+                    key=f"ei_amt_{jid}_{idx}",
+                    on_change=_sync_edit_commercials,
+                    args=(jid, idx, "amount", def_l, def_b, def_h, def_q, def_r),
+                )
+
+            ei_spec_notes = st.text_input(
+                "Technical Specifications / Material Notes",
+                value=def_notes,
+                placeholder="e.g. 5mm Clear Acrylic, 3M vinyl",
+                key=f"ei_sp_{jid}_{idx}",
+            )
+
+            ei_addr = st.text_input(
+                "Delivery Destination",
+                value=it.get("delivery_address", ""),
+                key=f"ei_ad_{jid}_{idx}",
+            )
+
+            size_str = f"Size: {ei_l} x {ei_b} x {ei_h} {ei_unit}"
+            full_spec = f"{size_str} | {ei_spec_notes.strip()}" if ei_spec_notes.strip() else size_str
+
+            edited_items.append({
+                "item_name": ei_name.strip(),
+                "specifications": full_spec,
+                "quantity": ei_qty,
+                "unit": it.get("unit", "Pcs"),
+                "rate": ei_rate,
+                "amount": ei_amt,
+                "delivery_address": ei_addr.strip(),
+            })
+
+    b_col1, b_col2 = st.columns([1, 1])
+    with b_col1:
+        if st.button("Cancel", use_container_width=True, key=f"btn_cancel_edit_{jid}"):
+            st.session_state["sales_edit_jid"] = None
+            st.rerun()
+    with b_col2:
+        if st.button("Save Changes", key=f"btn_save_edit_{jid}", type="primary", use_container_width=True):
+            if not ed_client:
+                st.error("Client name is required.")
+            elif ed_is_gst and (not ed_gstin or len(ed_gstin) < 15):
+                st.error("Please provide a valid 15-character GSTIN for GST Tax Invoices.")
+            elif ed_is_gst and not ed_baddr:
+                st.error("Registered Billing Address is required for GST Tax Invoices.")
+            elif any(not it.get("item_name") for it in edited_items):
+                st.error("Every line item must have a valid name.")
+            else:
+                updated_header = {
+                    "client_name": ed_client,
+                    "contact_person": ed_contact or "Direct Client",
+                    "contact_phone": ed_phone or "N/A",
+                    "due_date": str(ed_due),
+                    "current_stage": ed_stage,
+                    "assigned_designer": ed_designer if ed_stage == "DESIGN" else None,
+                    "billing_type": "GST" if ed_is_gst else "NON_GST",
+                    "gstin": ed_gstin if ed_is_gst else None,
+                    "billing_address": ed_baddr if ed_baddr else None,
+                    "place_of_supply": ed_pos if ed_is_gst else None,
+                }
+                ok, msg = update_job_sheet_by_management(jid, updated_header, edited_items)
+                if ok:
+                    log_audit(user["user_id"], "JOB_EDITED", f"Updated jobsheet #{job_no}")
+                    st.session_state["sales_edit_jid"] = None
+                    st.success(f"Jobsheet #{job_no} updated successfully.")
+                    st.rerun()
+                else:
+                    st.error(f"Failed to update jobsheet: {msg}")
 
 
 def render(user):
@@ -102,52 +372,18 @@ def render(user):
     t_create, t_history = st.tabs(["Create New Jobsheet", "Order History & Modifications"])
 
     # =========================================================
-    # TAB 1: CREATE NEW JOBSHEET (MODERN DARK THEME)
+    # TAB 1: CREATE NEW JOBSHEET
     # =========================================================
     with t_create:
-        # Styles for the left stepper navigation rail
         st.markdown("""
             <style>
-            .stepper-container {
-                display: flex;
-                flex-direction: column;
-                gap: 12px;
-                padding-top: 10px;
-            }
-            .stepper-item {
-                display: flex;
-                align-items: center;
-                gap: 12px;
-                font-size: 13px;
-                font-weight: 500;
-                color: #94a3b8;
-            }
-            .stepper-item.active {
-                color: #f8fafc;
-                font-weight: 600;
-            }
-            .step-dot {
-                width: 14px;
-                height: 14px;
-                border-radius: 50%;
-                border: 2px solid #475569;
-                background-color: transparent;
-                display: inline-block;
-            }
-            .step-dot.active {
-                background-color: #E11D48;
-                border-color: #E11D48;
-                box-shadow: 0 0 10px rgba(225, 29, 72, 0.5);
-            }
-            .step-line {
-                width: 2px;
-                height: 32px;
-                background-color: #334155;
-                margin-left: 6px;
-            }
-            .step-line.active {
-                background-color: #E11D48;
-            }
+            .stepper-container { display: flex; flex-direction: column; gap: 12px; padding-top: 10px; }
+            .stepper-item { display: flex; align-items: center; gap: 12px; font-size: 13px; font-weight: 500; color: #94a3b8; }
+            .stepper-item.active { color: #f8fafc; font-weight: 600; }
+            .step-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #475569; background-color: transparent; display: inline-block; }
+            .step-dot.active { background-color: #E11D48; border-color: #E11D48; box-shadow: 0 0 10px rgba(225, 29, 72, 0.5); }
+            .step-line { width: 2px; height: 32px; background-color: #334155; margin-left: 6px; }
+            .step-line.active { background-color: #E11D48; }
             </style>
         """, unsafe_allow_html=True)
 
@@ -174,36 +410,23 @@ def render(user):
                     itm["dim_unit"] = "Inch"
 
         st.markdown("### Jobsheet Creation Form")
-
-        # Layout: Left Stepper Navigation Rail, Right Form Sections
         rail_col, form_col = st.columns([1.5, 8.5])
 
         with rail_col:
             st.markdown("""
                 <div class="stepper-container">
-                    <div class="stepper-item active">
-                        <span class="step-dot active"></span>
-                        <span>1. Client Details</span>
-                    </div>
+                    <div class="stepper-item active"><span class="step-dot active"></span><span>1. Client Details</span></div>
                     <div class="step-line active"></div>
-                    <div class="stepper-item">
-                        <span class="step-dot"></span>
-                        <span>2. Item & Specifications</span>
-                    </div>
+                    <div class="stepper-item"><span class="step-dot"></span><span>2. Item & Specifications</span></div>
                     <div class="step-line"></div>
-                    <div class="stepper-item">
-                        <span class="step-dot"></span>
-                        <span>3. Commercials</span>
-                    </div>
+                    <div class="stepper-item"><span class="step-dot"></span><span>3. Commercials</span></div>
                 </div>
             """, unsafe_allow_html=True)
 
         with form_col:
-            # SECTION 1: CLIENT & COMMERCIAL HEADER
             with st.container(border=True):
                 st.markdown("#### 1. Client & Commercial Header")
 
-                # Row 1: Billing Classification (Left) & Jobsheet Number (Right)
                 r1_c1, r1_c2 = st.columns([6, 4])
                 with r1_c1:
                     billing_choice = st.radio(
@@ -211,30 +434,21 @@ def render(user):
                         options=["Non-GST Bill", "GST Invoice (B2B Tax Invoice)"],
                         index=0,
                         horizontal=True,
-                        key="s_billing_mode"
+                        key="s_billing_mode",
                     )
                     is_gst = "GST Invoice" in billing_choice
                 with r1_c2:
-                    st.text_input(
-                        "Jobsheet Number *",
-                        key="s_manual_job_no",
-                        placeholder="e.g. 1081"
-                    )
+                    st.text_input("Jobsheet Number *", key="s_manual_job_no", placeholder="e.g. 1081")
 
-                # Row 2: Billing Address (Left) & Target Delivery Date / Routing Workflow Target (Right)
                 r2_c1, r2_c2, r2_c3 = st.columns([6, 2, 2])
                 with r2_c1:
                     billing_address = st.text_input(
                         "Billing Address" + (" *" if is_gst else " (Optional)"),
                         placeholder="e.g. 12/A Park Street, Kolkata - 700016",
-                        key="s_baddr"
+                        key="s_baddr",
                     ).strip()
                 with r2_c2:
-                    due_date = st.date_input(
-                        "Target Date *",
-                        min_value=date.today(),
-                        key="s_due"
-                    )
+                    due_date = st.date_input("Target Date *", min_value=date.today(), key="s_due")
                 with r2_c3:
                     routed_desk = st.selectbox(
                         "Target Floor*",
@@ -248,7 +462,6 @@ def render(user):
                         key="s_route",
                     )
 
-                # Row 3: Client Entity, Contact, Phone, and Assigned Designer (Conditional)
                 target_designer = None
                 if routed_desk == "DESIGN":
                     r3_c1, r3_c2, r3_c3, r3_c4 = st.columns([2.5, 2.5, 2.5, 2.5])
@@ -256,23 +469,11 @@ def render(user):
                     r3_c1, r3_c2, r3_c3 = st.columns([3.3, 3.3, 3.4])
 
                 with r3_c1:
-                    client_name = st.text_input(
-                        "Client / Corporate Entity *",
-                        placeholder="e.g. Apollo Hospitals",
-                        key="s_client"
-                    ).strip()
+                    client_name = st.text_input("Client / Corporate Entity *", placeholder="e.g. Apollo Hospitals", key="s_client").strip()
                 with r3_c2:
-                    contact_person = st.text_input(
-                        "Contact Person",
-                        placeholder="e.g. Amitava Ghosh",
-                        key="s_contact"
-                    ).strip()
+                    contact_person = st.text_input("Contact Person", placeholder="e.g. Amitava Ghosh", key="s_contact").strip()
                 with r3_c3:
-                    contact_phone = st.text_input(
-                        "Mobile / Contact Number",
-                        placeholder="e.g. 9830112233",
-                        key="s_phone"
-                    ).strip()
+                    contact_phone = st.text_input("Mobile / Contact Number", placeholder="e.g. 9830112233", key="s_phone").strip()
 
                 if routed_desk == "DESIGN":
                     with r3_c4:
@@ -285,18 +486,14 @@ def render(user):
                         if "Broadcast" not in chosen:
                             target_designer = chosen.split(" (@")[0].strip()
 
-                    gstin = ""
-                    place_of_supply = "19 - West Bengal"
+                gstin = ""
+                place_of_supply = "19 - West Bengal"
 
                 if is_gst:
                     st.markdown("##### GST Compliance Information")
                     gc1, gc2 = st.columns([1, 1])
                     with gc1:
-                        gstin = st.text_input(
-                            "Client GSTIN *",
-                            placeholder="e.g. 19AAAAA0000A1Z5",
-                            key="s_gstin"
-                        ).strip().upper()
+                        gstin = st.text_input("Client GSTIN *", placeholder="e.g. 19AAAAA0000A1Z5", key="s_gstin").strip().upper()
                     with gc2:
                         place_of_supply = st.selectbox(
                             "Place of Supply (State) *",
@@ -308,18 +505,16 @@ def render(user):
                                 "18 - Assam",
                                 "07 - Delhi",
                                 "27 - Maharashtra",
-                                "Other State"
+                                "Other State",
                             ],
-                            key="s_pos"
+                            key="s_pos",
                         )
 
-            # SECTION 2: COMMERCIAL LINE ITEMS & SPECS
             with st.container(border=True):
                 head_c1, head_c2 = st.columns([7, 3])
                 with head_c1:
                     st.markdown("#### 2. Commercial Line Items & Specs")
                 with head_c2:
-                    st.markdown("<div style='text-align: right;'>", unsafe_allow_html=True)
                     if st.button("+ Add Item Row", key="btn_add_item_top", use_container_width=True):
                         st.session_state.sales_items.append({
                             "item_name": "",
@@ -334,7 +529,6 @@ def render(user):
                             "delivery_address": "",
                         })
                         st.rerun()
-                    st.markdown("</div>", unsafe_allow_html=True)
 
                 rows_to_remove = []
                 for idx, item in enumerate(st.session_state.sales_items):
@@ -356,101 +550,37 @@ def render(user):
                         st.caption("Sizes / Dimensions (Default: 1 x 1 x 1):")
                         s_c1, s_c2, s_c3, s_c4 = st.columns(4)
                         with s_c1:
-                            item["length"] = st.number_input(
-                                "Length (L)",
-                                min_value=0.0,
-                                value=float(item.get("length", 1.0)),
-                                step=1.0,
-                                key=f"item_len_{idx}",
-                                on_change=_recalc_on_dim_change,
-                                args=(idx,),
-                            )
+                            item["length"] = st.number_input("Length (L)", min_value=0.0, value=float(item.get("length", 1.0)), step=1.0, key=f"item_len_{idx}", on_change=_recalc_on_dim_change, args=(idx,))
                         with s_c2:
-                            item["breadth"] = st.number_input(
-                                "Breadth / Width (B)",
-                                min_value=0.0,
-                                value=float(item.get("breadth", 1.0)),
-                                step=1.0,
-                                key=f"item_brd_{idx}",
-                                on_change=_recalc_on_dim_change,
-                                args=(idx,),
-                            )
+                            item["breadth"] = st.number_input("Breadth / Width (B)", min_value=0.0, value=float(item.get("breadth", 1.0)), step=1.0, key=f"item_brd_{idx}", on_change=_recalc_on_dim_change, args=(idx,))
                         with s_c3:
-                            item["height"] = st.number_input(
-                                "Height / Depth (H)",
-                                min_value=0.0,
-                                value=float(item.get("height", 1.0)),
-                                step=0.5,
-                                key=f"item_hgt_{idx}",
-                                on_change=_recalc_on_dim_change,
-                                args=(idx,),
-                            )
+                            item["height"] = st.number_input("Height / Depth (H)", min_value=0.0, value=float(item.get("height", 1.0)), step=0.5, key=f"item_hgt_{idx}", on_change=_recalc_on_dim_change, args=(idx,))
                         with s_c4:
                             unit_options = ["Inch", "Ft"]
                             cur_u = item.get("dim_unit", "Inch")
                             u_idx = unit_options.index(cur_u) if cur_u in unit_options else 0
-                            item["dim_unit"] = st.selectbox(
-                                "Size Unit",
-                                unit_options,
-                                index=u_idx,
-                                key=f"item_dunit_{idx}",
-                            )
+                            item["dim_unit"] = st.selectbox("Size Unit", unit_options, index=u_idx, key=f"item_dunit_{idx}")
 
                         st.caption("Commercials (Fill any 2 fields to auto-calculate the 3rd):")
                         r_c1, r_c2, r_c3 = st.columns(3)
                         with r_c1:
-                            item["quantity"] = st.number_input(
-                                "Quantity",
-                                min_value=0.0,
-                                value=float(item.get("quantity", 0.0)),
-                                step=1.0,
-                                key=f"item_qty_{idx}",
-                                on_change=_sync_commercials,
-                                args=(idx, "qty"),
-                            )
+                            item["quantity"] = st.number_input("Quantity", min_value=0.0, value=float(item.get("quantity", 0.0)), step=1.0, key=f"item_qty_{idx}", on_change=_sync_commercials, args=(idx, "qty"))
                         with r_c2:
-                            item["rate"] = st.number_input(
-                                "Rate (INR)",
-                                min_value=0.0,
-                                value=float(item.get("rate", 0.0)),
-                                step=10.0,
-                                key=f"item_rate_{idx}",
-                                on_change=_sync_commercials,
-                                args=(idx, "rate"),
-                            )
+                            item["rate"] = st.number_input("Rate (INR)", min_value=0.0, value=float(item.get("rate", 0.0)), step=10.0, key=f"item_rate_{idx}", on_change=_sync_commercials, args=(idx, "rate"))
                         with r_c3:
-                            item["amount"] = st.number_input(
-                                "Total Amount (INR)",
-                                min_value=0.0,
-                                value=float(item.get("amount", 0.0)),
-                                step=50.0,
-                                key=f"item_amt_{idx}",
-                                on_change=_sync_commercials,
-                                args=(idx, "amount"),
-                            )
+                            item["amount"] = st.number_input("Total Amount (INR)", min_value=0.0, value=float(item.get("amount", 0.0)), step=50.0, key=f"item_amt_{idx}", on_change=_sync_commercials, args=(idx, "amount"))
 
                         d_c1, d_c2 = st.columns(2)
                         with d_c1:
-                            item["specifications"] = st.text_input(
-                                "Technical Specifications / Material Notes",
-                                value=item.get("specifications", ""),
-                                placeholder="e.g. 5mm Clear Acrylic, 3M vinyl, LED modules",
-                                key=f"item_spec_{idx}",
-                            )
+                            item["specifications"] = st.text_input("Technical Specifications / Material Notes", value=item.get("specifications", ""), placeholder="e.g. 5mm Clear Acrylic, 3M vinyl, LED modules", key=f"item_spec_{idx}")
                         with d_c2:
-                            item["delivery_address"] = st.text_input(
-                                "Delivery Address / Branch Location",
-                                value=item.get("delivery_address", ""),
-                                placeholder="e.g. Salt Lake Sector V Office",
-                                key=f"item_addr_{idx}",
-                            )
+                            item["delivery_address"] = st.text_input("Delivery Address / Branch Location", value=item.get("delivery_address", ""), placeholder="e.g. Salt Lake Sector V Office", key=f"item_addr_{idx}")
 
                 if rows_to_remove:
                     for r_idx in sorted(rows_to_remove, reverse=True):
                         st.session_state.sales_items.pop(r_idx)
                     st.rerun()
 
-            # SECTION 3: BOTTOM GRAND TOTAL & DISPATCH BAR
             grand_total = sum(float(it.get("amount", 0.0)) for it in st.session_state.sales_items)
 
             with st.container(border=True):
@@ -460,7 +590,7 @@ def render(user):
                         f"<div style='font-size: 20px; font-weight: 700; color: #f8fafc; padding-top: 6px;'>"
                         f"Grand Total Order Value: <span style='color: #ffffff;'>INR {grand_total:,.2f}</span>"
                         f"</div>",
-                        unsafe_allow_html=True
+                        unsafe_allow_html=True,
                     )
                 with sub_col2:
                     submit_clicked = st.button("Submit & Dispatch Jobsheet", type="primary", use_container_width=True)
@@ -495,7 +625,7 @@ def render(user):
                         "is_returned": False,
                         "billing_type": "GST" if is_gst else "NON_GST",
                         "gstin": gstin if is_gst else None,
-                        "billing_address": billing_address if is_gst else None,
+                        "billing_address": billing_address if billing_address else None,
                         "place_of_supply": place_of_supply if is_gst else None,
                         "is_billed": False,
                     }
@@ -546,7 +676,7 @@ def render(user):
                         st.error(f"Failed to create jobsheet: {msg}")
 
     # =========================================================
-    # TAB 2: ORDER HISTORY & MODIFICATIONS (15-ROW PAGINATED TABLE)
+    # TAB 2: ORDER HISTORY & MODIFICATIONS (CLICKABLE TEXT + CLEAN MODALS)
     # =========================================================
     with t_history:
         my_jobs = get_user_created_jobs(user["full_name"], is_management=is_management) or []
@@ -559,7 +689,7 @@ def render(user):
             "DISPATCH": "Dispatch Desk",
             "BILLING_REVIEW": "Billing Review",
             "BILLING": "Billing Desk",
-            "SETTLED": "Settled & Closed"
+            "SETTLED": "Settled & Closed",
         }
 
         stage_progress = {
@@ -570,7 +700,7 @@ def render(user):
             "DISPATCH": 90,
             "BILLING_REVIEW": 100,
             "BILLING": 100,
-            "SETTLED": 100
+            "SETTLED": 100,
         }
 
         pill_classes = {
@@ -581,61 +711,40 @@ def render(user):
             "DISPATCH": "pill-dispatch",
             "BILLING_REVIEW": "pill-billing",
             "BILLING": "pill-billing",
-            "SETTLED": "pill-settled"
+            "SETTLED": "pill-settled",
         }
 
-        # Callback to safely reset filter states before widgets re-instantiate
         def _reset_sales_filters():
             st.session_state["sales_search_kw"] = ""
             st.session_state["sales_floor_filter"] = "All Statuses"
             st.session_state["sales_sort_filter"] = "Recent Jobs (Newest First)"
             st.session_state["sales_page_num"] = 1
 
-        # Top Filter Bar
         with st.container(border=True):
             f1, f2, f3, f4 = st.columns([2.5, 2.5, 2.5, 1.5])
             with f1:
-                search_kw = st.text_input(
-                    "Search Orders",
-                    placeholder="Search Job No, Client, Contact...",
-                    key="sales_search_kw"
-                ).strip().lower()
+                search_kw = st.text_input("Search Orders", placeholder="Search Job No, Client, Contact...", key="sales_search_kw").strip().lower()
             with f2:
                 status_choices = ["All Statuses"] + list(floor_names.values())
                 sel_floor = st.selectbox("Floor Status", options=status_choices, key="sales_floor_filter")
             with f3:
-                sort_order = st.selectbox(
-                    "Sort By",
-                    options=["Recent Jobs (Newest First)", "Oldest Jobs", "Delivery Due Soonest"],
-                    key="sales_sort_filter"
-                )
+                sort_order = st.selectbox("Sort By", options=["Recent Jobs (Newest First)", "Oldest Jobs", "Delivery Due Soonest"], key="sales_sort_filter")
             with f4:
                 st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                st.button(
-                    "Reset Filters",
-                    type="secondary",
-                    use_container_width=True,
-                    key="sales_reset_btn",
-                    on_click=_reset_sales_filters
-                )
+                st.button("Reset Filters", type="secondary", use_container_width=True, key="sales_reset_btn", on_click=_reset_sales_filters)
 
-        # Filter Logic
         filtered_jobs = []
         for j in my_jobs:
             stg = j.get("current_stage", "DESIGN")
             stg_clean = floor_names.get(stg, stg)
-
             if sel_floor != "All Statuses" and stg_clean != sel_floor:
                 continue
-
             if search_kw:
                 comb_text = f"{j.get('job_no', '')} {j.get('client_name', '')} {j.get('contact_person', '')} {j.get('contact_phone', '')}".lower()
                 if search_kw not in comb_text:
                     continue
-
             filtered_jobs.append(j)
 
-        # Sorting Logic
         if sort_order == "Recent Jobs (Newest First)":
             filtered_jobs.sort(key=lambda x: x.get("job_id", 0), reverse=True)
         elif sort_order == "Oldest Jobs":
@@ -643,14 +752,12 @@ def render(user):
         elif sort_order == "Delivery Due Soonest":
             filtered_jobs.sort(key=lambda x: str(x.get("due_date", "9999-99-99")))
 
-        # Fixed 15 Rows Per Page
         ROWS_PER_PAGE = 15
         total_records = len(filtered_jobs)
         total_pages = max(1, (total_records + ROWS_PER_PAGE - 1) // ROWS_PER_PAGE)
 
         if "sales_page_num" not in st.session_state:
             st.session_state.sales_page_num = 1
-
         if st.session_state.sales_page_num > total_pages:
             st.session_state.sales_page_num = total_pages
 
@@ -659,13 +766,10 @@ def render(user):
         end_idx = min(start_idx + ROWS_PER_PAGE, total_records)
         page_records = filtered_jobs[start_idx:end_idx]
 
-        # Identify ticked jobs across the currently displayed page
         selected_job_ids = [
-            j["job_id"] for j in page_records 
-            if st.session_state.get(f"tbl_chk_{j['job_id']}", False)
+            j["job_id"] for j in page_records if st.session_state.get(f"tbl_chk_{j['job_id']}", False)
         ]
 
-        # Top Bar: Record Counter & Conditional Bulk Delete Button
         bar_col1, bar_col2 = st.columns([7, 3])
         with bar_col1:
             st.caption(f"Showing **{start_idx + 1 if total_records else 0} to {end_idx}** of **{total_records}** records")
@@ -685,7 +789,6 @@ def render(user):
         if not page_records:
             st.info("No matching job orders found.")
         else:
-            # Shared Typography Styles
             st.markdown("""
                 <style>
                 .tbl-cell-text {
@@ -718,10 +821,31 @@ def render(user):
                     font-weight: 700;
                     margin: auto;
                 }
+                /* Flat clickable text styling (no button borders/background) */
+                div[data-testid="stHorizontalBlock"] button[kind="tertiary"],
+                div[data-testid="stHorizontalBlock"] button[kind="secondary"] {
+                    border: none !important;
+                    background: transparent !important;
+                    box-shadow: none !important;
+                    padding: 6px 0 !important;
+                    font-size: 13px !important;
+                    font-weight: 600 !important;
+                    color: #1e293b !important;
+                    text-align: left !important;
+                    justify-content: flex-start !important;
+                    white-space: nowrap !important;
+                    overflow: hidden !important;
+                    text-overflow: ellipsis !important;
+                }
+                div[data-testid="stHorizontalBlock"] button[kind="tertiary"]:hover,
+                div[data-testid="stHorizontalBlock"] button[kind="secondary"]:hover {
+                    color: #E11D48 !important;
+                    text-decoration: underline !important;
+                    background: transparent !important;
+                }
                 </style>
             """, unsafe_allow_html=True)
 
-            # Table Header Bar (Blank space instead of '[ ]')
             st.markdown("""
                 <div class="adnet-table-header" style="padding: 10px 14px;">
                     <div style="display: grid; grid-template-columns: 0.3fr 1fr 1fr 1.8fr 1.6fr 1.1fr 0.9fr 1.3fr 1.6fr; align-items: center; gap: 8px;">
@@ -738,7 +862,6 @@ def render(user):
                 </div>
             """, unsafe_allow_html=True)
 
-            # Table Rows
             for j in page_records:
                 jid = j["job_id"]
                 job_no = j.get("job_no", str(jid))
@@ -760,26 +883,31 @@ def render(user):
                     st.checkbox(" ", key=f"tbl_chk_{jid}", label_visibility="collapsed")
 
                 with r_no:
-                    st.markdown(f"<div class='tbl-cell-text' style='font-weight: 700 !important;'>JOB-{job_no}</div>", unsafe_allow_html=True)
+                    if st.button(f"JOB-{job_no}", key=f"lnk_no_{jid}", type="tertiary", help="Click to view job details"):
+                        st.session_state["sales_view_jid"] = jid
 
                 with r_date:
-                    st.markdown(f"<div class='tbl-cell-text'>{created_date}</div>", unsafe_allow_html=True)
+                    if st.button(created_date, key=f"lnk_dt_{jid}", type="tertiary"):
+                        st.session_state["sales_view_jid"] = jid
 
                 with r_client:
-                    st.markdown(f"<div class='tbl-cell-text' title='{client_name}'>{client_name}</div>", unsafe_allow_html=True)
+                    if st.button(client_name, key=f"lnk_cl_{jid}", type="tertiary", help=client_name):
+                        st.session_state["sales_view_jid"] = jid
 
                 with r_contact:
-                    st.markdown(f"<div class='tbl-cell-text' title='{contact_p} ({contact_ph})'>{contact_p} <span style='color:#64748b; font-size:11px;'>({contact_ph})</span></div>", unsafe_allow_html=True)
+                    if st.button(f"{contact_p} ({contact_ph})", key=f"lnk_ct_{jid}", type="tertiary"):
+                        st.session_state["sales_view_jid"] = jid
 
                 with r_due:
-                    st.markdown(f"<div class='tbl-cell-text'>{due_date_str}</div>", unsafe_allow_html=True)
+                    if st.button(due_date_str, key=f"lnk_due_{jid}", type="tertiary"):
+                        st.session_state["sales_view_jid"] = jid
 
                 with r_prog:
                     st.markdown(
                         f"<div class='adnet-progress-circle-red' style='background: conic-gradient(#E11D48 {pct}%, #e2e8f0 0); border: 2px solid #ffffff;'>"
                         f"<div style='background: #ffffff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #BE123C; font-size: 10px; font-weight: 700;'>"
                         f"{pct}%</div></div>",
-                        unsafe_allow_html=True
+                        unsafe_allow_html=True,
                     )
 
                 with r_stat:
@@ -787,229 +915,80 @@ def render(user):
                         f"<div style='text-align: center; padding-top: 6px;'>"
                         f"<span class='adnet-pill {pill_style}'>{stg_display}</span>"
                         f"</div>",
-                        unsafe_allow_html=True
+                        unsafe_allow_html=True,
                     )
 
                 with r_act:
-                    action_choice = st.selectbox(
+                    def _on_sales_action_change(target_jid=jid):
+                        choice = st.session_state.get(f"act_drp_{target_jid}")
+                        if choice == "Edit":
+                            st.session_state["sales_edit_jid"] = target_jid
+                        elif choice == "Delete":
+                            st.session_state["sales_del_jid"] = target_jid
+                        st.session_state[f"act_drp_{target_jid}"] = "Select Action"
+
+                    st.selectbox(
                         "Action",
                         options=["Select Action", "Edit", "Delete"],
                         index=0,
                         key=f"act_drp_{jid}",
-                        label_visibility="collapsed"
+                        label_visibility="collapsed",
+                        on_change=_on_sales_action_change,
                     )
 
-                    if action_choice == "Delete":
-                        with st.popover(f"Confirm Delete Job #{job_no}", use_container_width=True):
-                            st.warning(f"Are you sure you want to delete Job #{job_no}?")
-                            if st.button("Confirm Delete", key=f"btn_confirm_del_{jid}", type="primary", use_container_width=True):
-                                delete_job_sheet(jid)
-                                log_audit(user["user_id"], "JOB_DELETED", f"Deleted job #{job_no} from Order History")
-                                st.success(f"Job #{job_no} deleted successfully.")
+            # Open View Details Modal when any row text is clicked
+            view_jid = st.session_state.get("sales_view_jid")
+            if view_jid:
+                target_job = next((x for x in my_jobs if x["job_id"] == view_jid), None)
+                if target_job:
+                    _show_sales_job_details_modal(target_job, floor_names)
+
+            # Open Edit Modal when "Edit" is chosen from Action dropdown
+            edit_jid = st.session_state.get("sales_edit_jid")
+            if edit_jid:
+                target_job = next((x for x in my_jobs if x["job_id"] == edit_jid), None)
+                if target_job:
+                    _show_sales_edit_modal(target_job, user)
+
+            # Confirm Delete Dialog when "Delete" is chosen from Action dropdown
+            del_jid = st.session_state.get("sales_del_jid")
+            if del_jid:
+                target_job = next((x for x in my_jobs if x["job_id"] == del_jid), None)
+                if target_job:
+                    @st.dialog("Confirm Delete Jobsheet")
+                    def _confirm_single_delete(job_obj):
+                        jno = job_obj.get("job_no", str(job_obj["job_id"]))
+                        st.warning(f"Permanently delete Job #{jno} ({job_obj.get('client_name', '')})?")
+                        dc1, dc2 = st.columns(2)
+                        with dc1:
+                            if st.button("Cancel", use_container_width=True):
+                                st.session_state["sales_del_jid"] = None
+                                st.rerun()
+                        with dc2:
+                            if st.button("Confirm Delete", type="primary", use_container_width=True):
+                                delete_job_sheet(job_obj["job_id"])
+                                log_audit(user["user_id"], "JOB_DELETED", f"Deleted job #{jno} from Order History")
+                                st.session_state["sales_del_jid"] = None
+                                st.success(f"Job #{jno} deleted successfully.")
                                 st.rerun()
 
-                    elif action_choice == "Edit":
-                        with st.popover(f"Edit Jobsheet #{job_no}", use_container_width=True):
-                            st.markdown(f"#### Edit Jobsheet #{job_no}")
-                            items = get_job_items(jid)
+                    _confirm_single_delete(target_job)
 
-                            is_currently_gst = j.get("billing_type") == "GST"
-                            ed_billing_choice = st.radio(
-                                "Billing Classification *",
-                                options=["Non-GST Bill", "GST Invoice (B2B Tax Invoice)"],
-                                index=1 if is_currently_gst else 0,
-                                horizontal=True,
-                                key=f"ed_bchoice_{jid}"
-                            )
-                            ed_is_gst = "GST Invoice" in ed_billing_choice
-
-                            ed_client = st.text_input("Client / Corporate Entity *", value=j.get("client_name") or "", key=f"ed_cl_{jid}").strip()
-                            ec1, ec2 = st.columns(2)
-                            with ec1:
-                                ed_contact = st.text_input("Contact Person", value=j.get("contact_person") or "", key=f"ed_cp_{jid}").strip()
-                            with ec2:
-                                ed_phone = st.text_input("Contact Phone", value=j.get("contact_phone") or "", key=f"ed_ph_{jid}").strip()
-
-                            cur_due = date.today()
-                            if j.get("due_date"):
-                                try:
-                                    cur_due = datetime.strptime(str(j.get("due_date")), "%Y-%m-%d").date()
-                                except Exception:
-                                    cur_due = date.today()
-
-                            ed1, ed2 = st.columns(2)
-                            with ed1:
-                                ed_due = st.date_input("Target Delivery Date *", value=cur_due, key=f"ed_due_{jid}")
-                            with ed2:
-                                stage_list = ["DESIGN", "PAYMENT", "PRODUCTION", "QC", "DISPATCH", "BILLING_REVIEW", "SETTLED"]
-                                cur_st_idx = stage_list.index(j.get("current_stage")) if j.get("current_stage") in stage_list else 0
-                                ed_stage = st.selectbox("Routing Stage *", stage_list, index=cur_st_idx, key=f"ed_stg_{jid}")
-
-                            ed_designer = None
-                            if ed_stage == "DESIGN":
-                                designers_all = get_all_designers()
-                                d_names = ["OPEN_POOL"] + [d["full_name"] for d in designers_all]
-                                cur_des = j.get("assigned_designer") or "OPEN_POOL"
-                                d_idx = d_names.index(cur_des) if cur_des in d_names else 0
-                                ed_designer = st.selectbox("Assigned Designer *", options=d_names, index=d_idx, key=f"ed_des_{jid}")
-
-                            ed_gstin = j.get("gstin", "") or ""
-                            ed_baddr = j.get("billing_address", "") or ""
-                            ed_pos = j.get("place_of_supply", "19 - West Bengal") or "19 - West Bengal"
-
-                            if ed_is_gst:
-                                eg1, eg2 = st.columns(2)
-                                with eg1:
-                                    ed_gstin = st.text_input("Client GSTIN *", value=ed_gstin, key=f"ed_gstin_{jid}").strip().upper()
-                                with eg2:
-                                    pos_opts = ["19 - West Bengal", "10 - Bihar", "20 - Jharkhand", "21 - Odisha", "18 - Assam", "07 - Delhi", "27 - Maharashtra", "Other State"]
-                                    pos_idx = pos_opts.index(ed_pos) if ed_pos in pos_opts else 0
-                                    ed_pos = st.selectbox("Place of Supply *", pos_opts, index=pos_idx, key=f"ed_pos_{jid}")
-
-                            ed_baddr = st.text_input(
-                                "Billing Address" + (" *" if ed_is_gst else " (Optional)"),
-                                value=ed_baddr,
-                                key=f"ed_baddr_{jid}"
-                            ).strip()
-
-                            st.markdown("---")
-                            st.markdown("##### Ordered Line Items & Deliverables")
-                            edited_items = []
-                            for idx, it in enumerate(items):
-                                with st.container(border=True):
-                                    st.caption(f"Item #{idx+1}")
-                                    ei_name = st.text_input("Item Name *", value=it.get("item_name", ""), key=f"ei_nm_{jid}_{idx}")
-
-                                    def_l, def_b, def_h, def_u, def_notes = _parse_spec_dimensions(it.get("specifications", ""))
-
-                                    st.caption("Sizes / Dimensions (Default: 1 x 1 x 1):")
-                                    ed_s1, ed_s2, ed_s3, ed_s4 = st.columns(4)
-                                    with ed_s1:
-                                        ei_l = st.number_input(
-                                            "Length (L)",
-                                            min_value=0.0,
-                                            value=def_l,
-                                            step=1.0,
-                                            key=f"ei_l_{jid}_{idx}",
-                                            on_change=_sync_edit_commercials,
-                                            args=(jid, idx, "dim"),
-                                        )
-                                    with ed_s2:
-                                        ei_b = st.number_input(
-                                            "Breadth / Width (B)",
-                                            min_value=0.0,
-                                            value=def_b,
-                                            step=1.0,
-                                            key=f"ei_b_{jid}_{idx}",
-                                            on_change=_sync_edit_commercials,
-                                            args=(jid, idx, "dim"),
-                                        )
-                                    with ed_s3:
-                                        ei_h = st.number_input(
-                                            "Height / Depth (H)",
-                                            min_value=0.0,
-                                            value=def_h,
-                                            step=0.5,
-                                            key=f"ei_h_{jid}_{idx}",
-                                            on_change=_sync_edit_commercials,
-                                            args=(jid, idx, "dim"),
-                                        )
-                                    with ed_s4:
-                                        unit_opts = ["Inch", "Ft"]
-                                        u_idx = unit_opts.index(def_u) if def_u in unit_opts else 0
-                                        ei_unit = st.selectbox(
-                                            "Size Unit",
-                                            unit_opts,
-                                            index=u_idx,
-                                            key=f"ei_u_{jid}_{idx}",
-                                        )
-
-                                    st.caption("Commercials (Fill any 2 fields to auto-calculate the 3rd):")
-                                    iq1, iq2, iq3 = st.columns(3)
-                                    with iq1:
-                                        ei_qty = st.number_input(
-                                            "Quantity",
-                                            value=float(it.get("quantity", 1.0)),
-                                            min_value=0.0,
-                                            step=1.0,
-                                            key=f"ei_q_{jid}_{idx}",
-                                            on_change=_sync_edit_commercials,
-                                            args=(jid, idx, "qty"),
-                                        )
-                                    with iq2:
-                                        ei_rate = st.number_input(
-                                            "Rate (INR)",
-                                            value=float(it.get("rate", 0.0)),
-                                            min_value=0.0,
-                                            step=10.0,
-                                            key=f"ei_r_{jid}_{idx}",
-                                            on_change=_sync_edit_commercials,
-                                            args=(jid, idx, "rate"),
-                                        )
-                                    with iq3:
-                                        ei_amt = st.number_input(
-                                            "Total Amount (INR)",
-                                            value=float(it.get("amount", 0.0)),
-                                            min_value=0.0,
-                                            step=50.0,
-                                            key=f"ei_amt_{jid}_{idx}",
-                                            on_change=_sync_edit_commercials,
-                                            args=(jid, idx, "amount"),
-                                        )
-
-                                    ei_spec_notes = st.text_input(
-                                        "Technical Specifications / Material Notes",
-                                        value=def_notes,
-                                        placeholder="e.g. 5mm Clear Acrylic, 3M vinyl",
-                                        key=f"ei_sp_{jid}_{idx}",
-                                    )
-
-                                    ei_addr = st.text_input(
-                                        "Delivery Destination",
-                                        value=it.get("delivery_address", ""),
-                                        key=f"ei_ad_{jid}_{idx}",
-                                    )
-
-                                    size_str = f"Size: {ei_l} x {ei_b} x {ei_h} {ei_unit}"
-                                    full_spec = f"{size_str} | {ei_spec_notes.strip()}" if ei_spec_notes.strip() else size_str
-
-                                    edited_items.append({
-                                        "item_name": ei_name.strip(),
-                                        "specifications": full_spec,
-                                        "quantity": ei_qty,
-                                        "unit": it.get("unit", "Pcs"),
-                                        "rate": ei_rate,
-                                        "amount": ei_amt,
-                                        "delivery_address": ei_addr.strip(),
-                                    })
-
-                            if st.button("Save Changes", key=f"btn_save_edit_{jid}", type="primary", use_container_width=True):
-                                if not ed_client:
-                                    st.error("Client name is required.")
-                                else:
-                                    # (Existing save logic...)
-                                    pass
-
-            # ------------------------------------------------------------------
-            # PASTE PAGINATION CONTROLS HERE (Aligned with "for j in page_records:")
-            # ------------------------------------------------------------------
+            # Bottom Pagination Bar
             if total_pages > 1:
                 st.markdown("<br>", unsafe_allow_html=True)
                 p_c1, p_c2, p_c3, p_c4, p_c5 = st.columns([2, 1, 2, 1, 2])
-
                 with p_c2:
                     if st.button("◀ Previous", disabled=(curr_page <= 1), use_container_width=True, key="sales_pg_prev"):
                         st.session_state.sales_page_num = max(1, curr_page - 1)
                         st.rerun()
-
                 with p_c3:
                     st.markdown(
                         f"<div style='text-align: center; padding-top: 6px; font-size: 14px; font-weight: 600; color: #475569;'>"
                         f"Page {curr_page} of {total_pages}"
                         f"</div>",
-                        unsafe_allow_html=True
+                        unsafe_allow_html=True,
                     )
-
                 with p_c4:
                     if st.button("Next ▶", disabled=(curr_page >= total_pages), use_container_width=True, key="sales_pg_next"):
                         st.session_state.sales_page_num = min(total_pages, curr_page + 1)
