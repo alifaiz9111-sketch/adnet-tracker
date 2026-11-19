@@ -208,29 +208,29 @@ def _parse_spec_dimensions(spec_str):
     return False, 1.0, 1.0, 1.0, "Inch", spec_str.strip()
 
 
-def _sync_edit_commercials(jid, idx, trigger_field, is_legacy_3d=False, def_d1=1.0, def_d2=1.0, def_d3=1.0, def_q=1.0, def_r=0.0):
+def _sync_edit_commercials(jid, item_id, trigger_field, is_legacy_3d=False, def_d1=1.0, def_d2=1.0, def_d3=1.0, def_q=1.0, def_r=0.0):
     if is_legacy_3d:
-        l_val = float(st.session_state.get(f"ei_l_{jid}_{idx}", def_d1))
-        b_val = float(st.session_state.get(f"ei_b_{jid}_{idx}", def_d2))
-        h_val = float(st.session_state.get(f"ei_h_{jid}_{idx}", def_d3))
+        l_val = float(st.session_state.get(f"ei_l_{jid}_{item_id}", def_d1))
+        b_val = float(st.session_state.get(f"ei_b_{jid}_{item_id}", def_d2))
+        h_val = float(st.session_state.get(f"ei_h_{jid}_{item_id}", def_d3))
         dim_factor = (l_val if l_val > 0 else 1.0) * (b_val if b_val > 0 else 1.0) * (h_val if h_val > 0 else 1.0)
     else:
-        h_val = float(st.session_state.get(f"ei_h2_{jid}_{idx}", def_d1))
-        w_val = float(st.session_state.get(f"ei_w2_{jid}_{idx}", def_d2))
+        h_val = float(st.session_state.get(f"ei_h2_{jid}_{item_id}", def_d1))
+        w_val = float(st.session_state.get(f"ei_w2_{jid}_{item_id}", def_d2))
         dim_factor = (h_val if h_val > 0 else 1.0) * (w_val if w_val > 0 else 1.0)
 
-    qty = float(st.session_state.get(f"ei_q_{jid}_{idx}", def_q))
-    rate = float(st.session_state.get(f"ei_r_{jid}_{idx}", def_r))
-    amt = float(st.session_state.get(f"ei_amt_{jid}_{idx}", 0.0))
+    qty = float(st.session_state.get(f"ei_q_{jid}_{item_id}", def_q))
+    rate = float(st.session_state.get(f"ei_r_{jid}_{item_id}", def_r))
+    amt = float(st.session_state.get(f"ei_amt_{jid}_{item_id}", 0.0))
 
     if trigger_field in ["dim", "qty", "rate"]:
         new_amt = round(dim_factor * qty * rate, 2)
-        st.session_state[f"ei_amt_{jid}_{idx}"] = new_amt
+        st.session_state[f"ei_amt_{jid}_{item_id}"] = new_amt
     elif trigger_field == "amount":
         if qty > 0 and dim_factor > 0:
-            st.session_state[f"ei_r_{jid}_{idx}"] = round(amt / (dim_factor * qty), 2)
+            st.session_state[f"ei_r_{jid}_{item_id}"] = round(amt / (dim_factor * qty), 2)
         elif rate > 0 and dim_factor > 0:
-            st.session_state[f"ei_q_{jid}_{idx}"] = round(amt / (dim_factor * rate), 2)
+            st.session_state[f"ei_q_{jid}_{item_id}"] = round(amt / (dim_factor * rate), 2)
 
 
 def _clear_edit_widget_state(jid):
@@ -380,9 +380,10 @@ def _show_sales_edit_modal(j, user):
     st.markdown("##### Ordered Line Items & Deliverables")
     edited_items = []
     for idx, it in enumerate(items):
+        item_id = it.get("item_id", idx)
         with st.container(border=True):
             st.caption(f"Item #{idx+1}")
-            ei_name = st.text_input("Item Name *", value=it.get("item_name", ""), key=f"ei_nm_{jid}_{idx}")
+            ei_name = st.text_input("Item Name *", value=it.get("item_name", ""), key=f"ei_nm_{jid}_{item_id}")
 
             is_legacy_3d, def_d1, def_d2, def_d3, def_u, def_notes = _parse_spec_dimensions(it.get("specifications", ""))
             def_q = float(it.get("quantity", 1.0))
@@ -398,9 +399,9 @@ def _show_sales_edit_modal(j, user):
                         min_value=0.0,
                         value=def_d1,
                         step=1.0,
-                        key=f"ei_l_{jid}_{idx}",
+                        key=f"ei_l_{jid}_{item_id}",
                         on_change=_sync_edit_commercials,
-                        args=(jid, idx, "dim", True, def_d1, def_d2, def_d3, def_q, def_r),
+                        args=(jid, item_id, "dim", True, def_d1, def_d2, def_d3, def_q, def_r),
                     )
                 with ed_s2:
                     ei_b = st.number_input(
@@ -408,9 +409,9 @@ def _show_sales_edit_modal(j, user):
                         min_value=0.0,
                         value=def_d2,
                         step=1.0,
-                        key=f"ei_b_{jid}_{idx}",
+                        key=f"ei_b_{jid}_{item_id}",
                         on_change=_sync_edit_commercials,
-                        args=(jid, idx, "dim", True, def_d1, def_d2, def_d3, def_q, def_r),
+                        args=(jid, item_id, "dim", True, def_d1, def_d2, def_d3, def_q, def_r),
                     )
                 with ed_s3:
                     ei_h = st.number_input(
@@ -418,14 +419,14 @@ def _show_sales_edit_modal(j, user):
                         min_value=0.0,
                         value=def_d3,
                         step=0.5,
-                        key=f"ei_h_{jid}_{idx}",
+                        key=f"ei_h_{jid}_{item_id}",
                         on_change=_sync_edit_commercials,
-                        args=(jid, idx, "dim", True, def_d1, def_d2, def_d3, def_q, def_r),
+                        args=(jid, item_id, "dim", True, def_d1, def_d2, def_d3, def_q, def_r),
                     )
                 with ed_s4:
                     unit_opts = ["Inch", "Ft"]
                     u_idx = unit_opts.index(def_u) if def_u in unit_opts else 0
-                    ei_unit = st.selectbox("Size Unit", unit_opts, index=u_idx, key=f"ei_u_{jid}_{idx}")
+                    ei_unit = st.selectbox("Size Unit", unit_opts, index=u_idx, key=f"ei_u_{jid}_{item_id}")
                 size_str = f"Size: {ei_l} x {ei_b} x {ei_h} {ei_unit}"
             else:
                 # New 2-dimension item (Height x Width)
@@ -437,9 +438,9 @@ def _show_sales_edit_modal(j, user):
                         min_value=0.0,
                         value=def_d1,
                         step=1.0,
-                        key=f"ei_h2_{jid}_{idx}",
+                        key=f"ei_h2_{jid}_{item_id}",
                         on_change=_sync_edit_commercials,
-                        args=(jid, idx, "dim", False, def_d1, def_d2, 1.0, def_q, def_r),
+                        args=(jid, item_id, "dim", False, def_d1, def_d2, 1.0, def_q, def_r),
                     )
                 with ed_s2:
                     ei_w2 = st.number_input(
@@ -447,14 +448,14 @@ def _show_sales_edit_modal(j, user):
                         min_value=0.0,
                         value=def_d2,
                         step=1.0,
-                        key=f"ei_w2_{jid}_{idx}",
+                        key=f"ei_w2_{jid}_{item_id}",
                         on_change=_sync_edit_commercials,
-                        args=(jid, idx, "dim", False, def_d1, def_d2, 1.0, def_q, def_r),
+                        args=(jid, item_id, "dim", False, def_d1, def_d2, 1.0, def_q, def_r),
                     )
                 with ed_s3:
                     unit_opts = ["Inch", "Ft"]
                     u_idx = unit_opts.index(def_u) if def_u in unit_opts else 0
-                    ei_unit = st.selectbox("Size Unit", unit_opts, index=u_idx, key=f"ei_u_{jid}_{idx}")
+                    ei_unit = st.selectbox("Size Unit", unit_opts, index=u_idx, key=f"ei_u_{jid}_{item_id}")
                 size_str = f"Size: {ei_h2} x {ei_w2} {ei_unit}"
 
             st.caption("Commercials (Fill any 2 fields to auto-calculate the 3rd):")
@@ -465,9 +466,9 @@ def _show_sales_edit_modal(j, user):
                     value=def_q,
                     min_value=0.0,
                     step=1.0,
-                    key=f"ei_q_{jid}_{idx}",
+                    key=f"ei_q_{jid}_{item_id}",
                     on_change=_sync_edit_commercials,
-                    args=(jid, idx, "qty", is_legacy_3d, def_d1, def_d2, def_d3, def_q, def_r),
+                    args=(jid, item_id, "qty", is_legacy_3d, def_d1, def_d2, def_d3, def_q, def_r),
                 )
             with iq2:
                 ei_rate = st.number_input(
@@ -475,9 +476,9 @@ def _show_sales_edit_modal(j, user):
                     value=def_r,
                     min_value=0.0,
                     step=10.0,
-                    key=f"ei_r_{jid}_{idx}",
+                    key=f"ei_r_{jid}_{item_id}",
                     on_change=_sync_edit_commercials,
-                    args=(jid, idx, "rate", is_legacy_3d, def_d1, def_d2, def_d3, def_q, def_r),
+                    args=(jid, item_id, "rate", is_legacy_3d, def_d1, def_d2, def_d3, def_q, def_r),
                 )
             with iq3:
                 ei_amt = st.number_input(
@@ -485,22 +486,22 @@ def _show_sales_edit_modal(j, user):
                     value=float(it.get("amount", 0.0)),
                     min_value=0.0,
                     step=50.0,
-                    key=f"ei_amt_{jid}_{idx}",
+                    key=f"ei_amt_{jid}_{item_id}",
                     on_change=_sync_edit_commercials,
-                    args=(jid, idx, "amount", is_legacy_3d, def_d1, def_d2, def_d3, def_q, def_r),
+                    args=(jid, item_id, "amount", is_legacy_3d, def_d1, def_d2, def_d3, def_q, def_r),
                 )
 
             ei_spec_notes = st.text_input(
                 "Technical Specifications / Material Notes",
                 value=def_notes,
                 placeholder="e.g. 5mm Clear Acrylic, 3M vinyl",
-                key=f"ei_sp_{jid}_{idx}",
+                key=f"ei_sp_{jid}_{item_id}",
             )
 
             ei_addr = st.text_input(
                 "Delivery Destination",
                 value=it.get("delivery_address", ""),
-                key=f"ei_ad_{jid}_{idx}",
+                key=f"ei_ad_{jid}_{item_id}",
             )
 
             full_spec = f"{size_str} | {ei_spec_notes.strip()}" if ei_spec_notes.strip() else size_str
